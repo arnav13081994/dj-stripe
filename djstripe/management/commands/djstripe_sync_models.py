@@ -35,6 +35,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        import debugpy
+
+        # ? Attach a python debuger on 0.0.0.0:5679. Can be used directly in VScode Debugger
+        try:
+            # each gunicorn worker will try to attach to the same host and port
+            # and that will throw an error as 1 process can be attached to a port
+            debugpy.listen(address=("0.0.0.0", 5679))
+            print("Django: Attached remote debugger")
+        except RuntimeError as error:
+            # do nothing
+            print(f"Multiple workers trying to attach the remote debugger. {error}")
+
         app_label = "djstripe"
         app_config = apps.get_app_config(app_label)
         model_list = []  # type: List[models.StripeModel]
