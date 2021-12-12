@@ -118,7 +118,11 @@ DJSTRIPE_FOREIGN_KEY_TO_FIELD = (
 )
 
 DJSTRIPE_WEBHOOK_VALIDATION = "verify_signature"
-DJSTRIPE_WEBHOOK_SECRET = os.environ.get("DJSTRIPE_TEST_WEBHOOK_SECRET", "whsec_XXXXX")
+DJSTRIPE_WEBHOOK_SECRET = os.environ.get(
+    "DJSTRIPE_TEST_WEBHOOK_SECRET",
+    "whsec_xxx",
+    # "whsec_o8p5hmW6JjYjQGENVLlLi9dlAr55QeKQ",
+)
 
 STATIC_URL = "/static/"
 
