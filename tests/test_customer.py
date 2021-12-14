@@ -24,6 +24,7 @@ from djstripe.models import (
     Plan,
     Price,
     Product,
+    Source,
     Subscription,
 )
 from djstripe.settings import djstripe_settings
@@ -50,6 +51,7 @@ from . import (
     FAKE_PRICE,
     FAKE_PRODUCT,
     FAKE_SOURCE,
+    FAKE_SOURCE_II,
     FAKE_SUBSCRIPTION,
     FAKE_SUBSCRIPTION_II,
     FAKE_UPCOMING_INVOICE,
@@ -117,12 +119,11 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         user = get_user_model().objects.create_user(
             username="test_user_sync_unsupported_source"
         )
-        synced_customer = fake_customer.create_for_user(user)
-        self.assertEqual(0, synced_customer.legacy_cards.count())
-        self.assertEqual(0, synced_customer.sources.count())
-        self.assertEqual(
-            synced_customer.default_source,
-            DjstripePaymentMethod.objects.get(id=fake_customer["default_source"]["id"]),
+        self.assertRaisesRegexp(
+            ValueError,
+            "Trying to fit a 'fish' into 'Card'. Aborting.",
+            fake_customer.create_for_user,
+            user,
         )
 
     def test_customer_sync_has_subscriber_metadata(self):
@@ -210,24 +211,46 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
             },
         )
 
+    @patch.object(Card, "_get_or_create_from_stripe_object")
+    @patch("stripe.Customer.retrieve", autospec=True)
     @patch(
         "stripe.Card.retrieve",
-        return_value=FAKE_CUSTOMER_II["default_source"],
         autospec=True,
     )
-    def test_customer_sync_non_local_card(self, card_retrieve_mock):
+    def test_customer_sync_non_local_card(
+        self, card_retrieve_mock, customer_retrieve_mock, card_get_or_create_mock
+    ):
         fake_customer = deepcopy(FAKE_CUSTOMER_II)
         fake_customer["id"] = fake_customer["sources"]["data"][0][
             "customer"
         ] = "cus_test_sync_non_local_card"
+        fake_customer["default_source"]["id"] = fake_customer["sources"]["data"][0][
+            "id"
+        ] = "card_cus_test_sync_non_local_card"
+
+        customer_retrieve_mock.return_value = fake_customer
+
+        fake_card = deepcopy(fake_customer["default_source"])
+        fake_card["customer"] = "cus_test_sync_non_local_card"
+        card_retrieve_mock.return_value = fake_card
+        card_get_or_create_mock.return_value = fake_card
 
         user = get_user_model().objects.create_user(
             username="test_user_sync_non_local_card"
         )
+
+        # create a source object so that FAKE_CUSTOMER_III with a default source
+        # can be created correctly.
+        fake_source_data = deepcopy(FAKE_SOURCE_II)
+        fake_source_data["card"] = deepcopy(fake_card)
+        fake_source_data["customer"] = fake_customer
+
+        Source.sync_from_stripe_data(fake_source_data)
+
         customer = fake_customer.create_for_user(user)
 
-        self.assertEqual(customer.sources.count(), 0)
-        self.assertEqual(customer.legacy_cards.count(), 1)
+        self.assertEqual(customer.sources.count(), 1)
+        self.assertEqual(customer.legacy_cards.count(), 0)
         self.assertEqual(
             customer.default_source.id, fake_customer["default_source"]["id"]
         )
@@ -244,6 +267,7 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         )
         customer = fake_customer.create_for_user(user)
 
+        self.assertEqual(customer.deleted, False)
         self.assertEqual(customer.sources.count(), 0)
         self.assertEqual(customer.legacy_cards.count(), 0)
         self.assertEqual(customer.bank_account.count(), 1)
@@ -292,12 +316,13 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
     def test_customer_sync_default_source_string(self):
         Customer.objects.all().delete()
         Card.objects.all().delete()
+
         customer_fake = deepcopy(FAKE_CUSTOMER)
-        customer_fake["default_source"] = customer_fake["sources"]["data"][0][
-            "id"
-        ] = "card_sync_source_string"
+
         customer = Customer.sync_from_stripe_data(customer_fake)
-        self.assertEqual(customer.default_source.id, customer_fake["default_source"])
+        self.assertEqual(
+            customer.default_source.id, customer_fake["default_source"]["id"]
+        )
         self.assertEqual(customer.legacy_cards.count(), 2)
         self.assertEqual(len(list(customer.customer_payment_methods)), 2)
 
@@ -340,6 +365,11 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
             },
         )
 
+    @patch(
+        "stripe.Customer.delete_source",
+        autospec=IS_STATICMETHOD_AUTOSPEC_SUPPORTED,
+    )
+    @patch("stripe.Customer.delete", autospec=True)
     @patch("stripe.Customer.retrieve", autospec=True)
     @patch(
         "stripe.Customer.retrieve_source",
@@ -347,19 +377,27 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         autospec=IS_STATICMETHOD_AUTOSPEC_SUPPORTED,
     )
     def test_customer_purge_leaves_customer_record(
-        self, customer_retrieve_source_mock, customer_retrieve_fake
+        self,
+        customer_retrieve_source_mock,
+        customer_retrieve_fake,
+        customer_delete_mock,
+        customer_source_delete_mock,
     ):
         self.customer.purge()
         customer = Customer.objects.get(id=self.customer.id)
 
         self.assertTrue(customer.subscriber is None)
         self.assertTrue(customer.default_source is None)
+        self.assertTrue(customer.deleted is True)
         self.assertTrue(not customer.legacy_cards.all())
         self.assertTrue(not customer.sources.all())
         self.assertTrue(get_user_model().objects.filter(pk=self.user.pk).exists())
 
     @patch("stripe.Customer.create", autospec=True)
-    def test_customer_purge_detaches_sources(self, customer_api_create_fake):
+    def test_customer_purge_detaches_sources(
+        self,
+        customer_api_create_fake,
+    ):
         fake_customer = deepcopy(FAKE_CUSTOMER_III)
         customer_api_create_fake.return_value = fake_customer
 
@@ -373,7 +411,7 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assertIsNotNone(customer.default_source)
         self.assertNotEqual(customer.sources.count(), 0)
 
-        with patch("stripe.Customer.retrieve", autospec=True), patch(
+        with patch("stripe.Customer.delete", autospec=True), patch(
             "stripe.Source.retrieve", return_value=deepcopy(FAKE_SOURCE), autospec=True
         ):
             customer.purge()
@@ -400,7 +438,7 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
             IdempotencyKey.objects.filter(action=idempotency_key_action).exists()
         )
 
-        with patch("stripe.Customer.retrieve", autospec=True):
+        with patch("stripe.Customer.delete", autospec=True):
             customer.purge()
 
         self.assertFalse(
@@ -408,17 +446,17 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         )
 
     @patch(
+        "stripe.Customer.delete_source",
+        autospec=IS_STATICMETHOD_AUTOSPEC_SUPPORTED,
+    )
+    @patch("stripe.Customer.delete", autospec=True)
+    @patch(
         "stripe.Customer.retrieve",
         side_effect=InvalidRequestError("No such customer:", "blah"),
         autospec=True,
     )
-    @patch(
-        "stripe.Customer.retrieve_source",
-        return_value=deepcopy(FAKE_CARD),
-        autospec=IS_STATICMETHOD_AUTOSPEC_SUPPORTED,
-    )
     def test_customer_purge_raises_customer_exception(
-        self, customer_retrieve_source_mock, customer_retrieve_mock
+        self, customer_retrieve_mock, customer_delete_mock, customer_source_delete_mock
     ):
 
         self.customer.purge()
@@ -429,29 +467,41 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assertTrue(not customer.sources.all())
         self.assertTrue(get_user_model().objects.filter(pk=self.user.pk).exists())
 
-        customer_retrieve_mock.assert_called_with(
-            id=self.customer.id,
+        customer_delete_mock.assert_called_once_with(
+            self.customer.id,
             api_key=djstripe_settings.STRIPE_SECRET_KEY,
-            expand=ANY,
             stripe_account=self.customer.djstripe_owner_account.id,
         )
-        self.assertEqual(1, customer_retrieve_mock.call_count)
 
-        self.assertEqual(2, customer_retrieve_source_mock.call_count)
+        self.assertEqual(0, customer_retrieve_mock.call_count)
 
+        self.assertEqual(2, customer_source_delete_mock.call_count)
+
+    @patch("stripe.Customer.delete_source", autospec=True)
+    @patch("stripe.Customer.delete", autospec=True)
     @patch("stripe.Customer.retrieve", autospec=True)
-    def test_customer_delete_raises_unexpected_exception(self, customer_retrieve_mock):
-        customer_retrieve_mock.side_effect = InvalidRequestError(
+    @patch(
+        "stripe.Customer.retrieve_source",
+        return_value=deepcopy(FAKE_CARD),
+        autospec=IS_STATICMETHOD_AUTOSPEC_SUPPORTED,
+    )
+    def test_customer_delete_raises_unexpected_exception(
+        self,
+        customer_retrieve_source_mock,
+        customer_retrieve_mock,
+        customer_delete_mock,
+        customer_source_delete_mock,
+    ):
+        customer_delete_mock.side_effect = InvalidRequestError(
             "Unexpected Exception", "blah"
         )
 
         with self.assertRaisesMessage(InvalidRequestError, "Unexpected Exception"):
             self.customer.purge()
 
-        customer_retrieve_mock.assert_called_once_with(
-            id=self.customer.id,
+        customer_delete_mock.assert_called_once_with(
+            self.customer.id,
             api_key=djstripe_settings.STRIPE_SECRET_KEY,
-            expand=ANY,
             stripe_account=self.customer.djstripe_owner_account.id,
         )
 

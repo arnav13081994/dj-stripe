@@ -367,6 +367,7 @@ class Charge(StripeModel):
             self.fraud_details and list(self.fraud_details.values())[0] == "fraudulent"
         )
 
+    # todo may be unnecessary after this PR
     def _attach_objects_hook(self, cls, data, current_ids=None):
         from .payment_methods import DjstripePaymentMethod
 
@@ -603,6 +604,8 @@ class Customer(StripeModel):
 
     address = JSONField(null=True, blank=True, help_text="The customer's address.")
     balance = StripeQuantumCurrencyAmountField(
+        null=True,
+        blank=True,
         default=0,
         help_text=(
             "Current balance (in cents), if any, being stored on the customer's "
@@ -625,9 +628,23 @@ class Customer(StripeModel):
         on_delete=models.SET_NULL, null=True, blank=True, related_name="customers"
     )
     delinquent = models.BooleanField(
+        null=True,
+        blank=True,
         default=False,
         help_text="Whether or not the latest charge for the customer's "
         "latest invoice has failed.",
+    )
+    # Stripe API returns deleted customers like so:
+    # {
+    #   "id": "cus_KX439W5dKrpi22",
+    #   "object": "customer",
+    #   "deleted": true,
+    # }
+    deleted = models.BooleanField(
+        default=False,
+        null=True,
+        blank=True,
+        help_text="Whether the Customer instance has been deleted upstream in Stripe or not.",
     )
     # <discount>
     coupon = models.ForeignKey(
@@ -722,6 +739,17 @@ class Customer(StripeModel):
 
     @classmethod
     def _manipulate_stripe_object_hook(cls, data):
+
+        # stripe adds a deleted attribute if the Customer has been deleted upstream
+        if data.get("deleted"):
+            logger.warning(
+                f"This customer ({data.get('id')}) has been deleted upstream, in Stripe"
+            )
+
+        else:
+            # set "deleted" key to False (default)
+            data["deleted"] = False
+
         discount = data.get("discount")
         if discount:
             data["coupon_start"] = discount["start"]
@@ -1098,6 +1126,8 @@ class Customer(StripeModel):
         return payment_method
 
     def purge(self):
+        """Customers are soft deleted as deleted customers are still accessible by the
+        Stripe API and sync for all RelatedModels would fail"""
         try:
             self._api_delete()
         except InvalidRequestError as exc:
@@ -1108,6 +1138,10 @@ class Customer(StripeModel):
             else:
                 # The exception was raised for another reason, re-raise it
                 raise
+
+        # toggle the deleted flag on Customer to indicate it has been
+        # deleted upstream in Stripe
+        self.deleted = True
 
         if self.subscriber:
             # Delete the idempotency key used by Customer.create()
@@ -1290,6 +1324,8 @@ class Customer(StripeModel):
 
         save = False
 
+        # todo check all "reverse" PaymentMethod FKs model's attach and attach post swave hooks for sources syncs.
+        # todo should be unnecessary after this pr
         customer_sources = data.get("sources")
         sources = {}
         if customer_sources:

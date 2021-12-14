@@ -46,7 +46,12 @@ class DjstripePaymentMethod(models.Model):
         return instance
 
     @classmethod
-    def _get_or_create_source(cls, data, source_type):
+    def _get_or_create_source(cls, data, source_type=None):
+
+        # prefer passed in source_type
+        if not source_type:
+            source_type = data["object"]
+
         try:
             model = cls._model_for_type(source_type)
             model._get_or_create_from_stripe_object(data)
@@ -76,6 +81,54 @@ class DjstripePaymentMethod(models.Model):
 
     def resolve(self):
         return self.object_model.objects.get(id=self.id)
+
+    @classmethod
+    def _get_or_create_from_stripe_object(
+        cls,
+        data,
+        field_name="id",
+        refetch=True,
+        current_ids=None,
+        pending_relations=None,
+        save=True,
+        stripe_account=None,
+    ):
+
+        raw_field_data = data.get(field_name)
+        id_ = StripeModel._id_from_data(raw_field_data)
+
+        if id_.startswith("card"):
+            source_cls = Card
+            source_type = "card"
+        elif id_.startswith("src"):
+            source_cls = Source
+            source_type = "source"
+        elif id_.startswith("ba"):
+            source_cls = BankAccount
+            source_type = "bank_account"
+        elif id_.startswith("acct"):
+            source_cls = Account
+            source_type = "account"
+        else:
+            # This may happen if we have source types we don't know about.
+            # Let's not make dj-stripe entirely unusable if that happens.
+            logger.warning(f"Unknown Object. Could not sync source with id: {id_}")
+            return cls.objects.get_or_create(
+                id=id_, defaults={"type": f"UNSUPPORTED_{id_}"}
+            )
+
+        # call model's _get_or_create_from_stripe_object to ensure
+        # that object exists before getting or creating its source object
+        source_cls._get_or_create_from_stripe_object(
+            data,
+            field_name,
+            refetch=refetch,
+            current_ids=current_ids,
+            pending_relations=pending_relations,
+            stripe_account=stripe_account,
+        )
+
+        return cls.objects.get_or_create(id=id_, defaults={"type": source_type})
 
 
 class LegacySourceMixin:
@@ -254,6 +307,33 @@ class LegacySourceMixin:
                 expand=self.expand_fields,
                 stripe_account=stripe_account,
                 api_key=api_key,
+            )
+
+    def _api_delete(self, api_key=None, stripe_account=None, **kwargs):
+        # OVERRIDING the parent version of this function
+        # Cards & Banks Accounts must be manipulated through a customer or account.
+
+        api_key = api_key or self.default_api_key
+        # Prefer passed in stripe_account if set.
+        if not stripe_account:
+            stripe_account = self._get_stripe_account_id(api_key)
+
+        if self.customer:
+            return stripe.Customer.delete_source(
+                self.customer.id,
+                self.id,
+                api_key=api_key,
+                stripe_account=stripe_account,
+                **kwargs,
+            )
+
+        if self.account:
+            return stripe.Account.delete_external_account(
+                self.account.id,
+                self.id,
+                api_key=api_key,
+                stripe_account=stripe_account,
+                **kwargs,
             )
 
 
@@ -680,6 +760,16 @@ class PaymentMethod(StripeModel):
         enum=enums.PaymentMethodType,
         help_text="The type of the PaymentMethod.",
     )
+    acss_debit = JSONField(
+        null=True,
+        blank=True,
+        help_text="Additional information for payment methods of type `acss_debit`",
+    )
+    afterpay_clearpay = JSONField(
+        null=True,
+        blank=True,
+        help_text="Additional information for payment methods of type `afterpay_clearpay`",
+    )
     alipay = JSONField(
         null=True,
         blank=True,
@@ -699,6 +789,11 @@ class PaymentMethod(StripeModel):
         null=True,
         blank=True,
         help_text="Additional information for payment methods of type `bancontact`",
+    )
+    boleto = JSONField(
+        null=True,
+        blank=True,
+        help_text="Additional information for payment methods of type `boleto`",
     )
     card = JSONField(
         null=True,
@@ -724,6 +819,11 @@ class PaymentMethod(StripeModel):
         null=True,
         blank=True,
         help_text="Additional information for payment methods of type `giropay`",
+    )
+    grabpay = JSONField(
+        null=True,
+        blank=True,
+        help_text="Additional information for payment methods of type `grabpay`",
     )
     ideal = JSONField(
         null=True,
@@ -756,6 +856,11 @@ class PaymentMethod(StripeModel):
         null=True,
         blank=True,
         help_text="Additional information for payment methods of type `sofort`",
+    )
+    wechat_pay = JSONField(
+        null=True,
+        blank=True,
+        help_text="Additional information for payment methods of type `wechat_pay`",
     )
 
     def __str__(self):

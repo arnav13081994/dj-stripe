@@ -224,8 +224,8 @@ class StripeModel(StripeBaseModel):
         if not stripe_account:
             stripe_account = self._get_stripe_account_id(api_key)
 
-        return self.api_retrieve(api_key=api_key, stripe_account=stripe_account).delete(
-            **kwargs
+        return self.stripe_class.delete(
+            self.id, api_key=api_key, stripe_account=stripe_account, **kwargs
         )
 
     def _api_update(self, api_key=None, stripe_account=None, **kwargs):
@@ -245,7 +245,7 @@ class StripeModel(StripeBaseModel):
             stripe_account = self._get_stripe_account_id(api_key)
 
         return self.stripe_class.modify(
-            self.id, stripe_account=stripe_account, **kwargs
+            self.id, api_key=api_key, stripe_account=stripe_account, **kwargs
         )
 
     def str_parts(self) -> List[str]:
@@ -273,11 +273,21 @@ class StripeModel(StripeBaseModel):
         """
         from .account import Account
 
-        if data and data.get("account"):
-            # try to fetch by stripe_account. Also takes care of Stripe Connected Accounts
-            stripe_account = cls._id_from_data(data.get("account"))
-            if stripe_account:
-                return Account._get_or_retrieve(id=stripe_account)
+        # try to fetch by stripe_account. Also takes care of Stripe Connected Accounts
+        if data:
+            # case of Webhook Event Trigger
+            if data.get("object") == "event":
+                # if account key exists and has a not null value
+                if data.get("account"):
+                    stripe_account = cls._id_from_data(data.get("account"))
+                    if stripe_account:
+                        return Account._get_or_retrieve(id=stripe_account)
+
+            else:
+                if getattr(data, "stripe_account", ""):
+                    stripe_account = cls._id_from_data(data.stripe_account)
+                    if stripe_account:
+                        return Account._get_or_retrieve(id=stripe_account)
 
         # try to fetch by the given api_key.
         return Account.get_or_retrieve_for_api_key(api_key)
@@ -404,13 +414,17 @@ class StripeModel(StripeBaseModel):
         :type stripe_account: string
         :return:
         """
+        from djstripe.models import DjstripePaymentMethod
+
         field_data = None
         field_name = field.name
         raw_field_data = manipulated_data.get(field_name)
         refetch = False
         skip = False
 
-        if issubclass(field.related_model, StripeModel):
+        if issubclass(field.related_model, StripeModel) or issubclass(
+            field.related_model, DjstripePaymentMethod
+        ):
             id_ = cls._id_from_data(raw_field_data)
 
             if not raw_field_data:
