@@ -1182,7 +1182,9 @@ class Plan(StripeModel):
         from .billing import Subscription
 
         subscriptions = Subscription.objects.filter(plan__id=self.id).count()
-        return f"{self.human_readable_price} for {self.product.name} ({subscriptions} subscriptions)"
+        if self.product and self.product.name:
+            return f"{self.human_readable_price} for {self.product.name} ({subscriptions} subscriptions)"
+        return f"{self.human_readable_price} ({subscriptions} subscriptions)"
 
     @property
     def amount_in_cents(self):
@@ -1336,7 +1338,6 @@ class Subscription(StripeModel):
         "subscription. This value will be `null` for subscriptions where "
         "`billing=charge_automatically`.",
     )
-    # todo not in record_data.items() --> Expected to sync. Need to test
     default_payment_method = StripeForeignKey(
         "PaymentMethod",
         null=True,
@@ -1358,7 +1359,6 @@ class Subscription(StripeModel):
         "and be in a chargeable state. If not set, defaults to the customer’s "
         "default source.",
     )
-    # todo not in record_data.items() --> Expected to sync. Need to test
     default_tax_rates = models.ManyToManyField(
         "TaxRate",
         # explicitly specify the joining table name as though the joining model
@@ -1378,8 +1378,14 @@ class Subscription(StripeModel):
         "because the customer was switched to a subscription to a new plan), "
         "the date the subscription ended.",
     )
-
-    # TODO: latest_invoice (issue #1067)
+    latest_invoice = StripeForeignKey(
+        "Invoice",
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+        help_text="The most recent invoice this subscription has generated.",
+    )
     next_pending_invoice_item_invoice = StripeDateTimeField(
         null=True,
         blank=True,
@@ -1394,7 +1400,6 @@ class Subscription(StripeModel):
         "pending invoice items. It is analogous to calling Create an invoice "
         "for the given subscription at the specified interval.",
     )
-    # todo not in record_data.items() --> Expected to sync. Need to test
     pending_setup_intent = StripeForeignKey(
         "SetupIntent",
         null=True,
@@ -1427,7 +1432,6 @@ class Subscription(StripeModel):
         help_text="The quantity applied to this subscription. This value will be "
         "`null` for multi-plan subscriptions",
     )
-    # todo not in record_data.items() --> Expected to sync. Need to test
     schedule = models.ForeignKey(
         "SubscriptionSchedule",
         null=True,
