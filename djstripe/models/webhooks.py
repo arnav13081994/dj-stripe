@@ -12,17 +12,69 @@ from django.utils.datastructures import CaseInsensitiveMapping
 from django.utils.functional import cached_property
 
 from ..context_managers import stripe_temporary_api_version
-from ..fields import JSONField, StripeForeignKey
+from ..enums import WebhookEndpointStatus
+from ..fields import JSONField, StripeEnumField, StripeForeignKey
 from ..settings import djstripe_settings
 from ..signals import webhook_processing_error
 from .base import StripeModel, logger
 from .core import Event
 
 
+class WebhookEndpoint(StripeModel):
+    stripe_class = stripe.WebhookEndpoint
+
+    api_version = models.CharField(
+        max_length=10,
+        blank=True,
+        help_text="The API version events are rendered as for this webhook endpoint.",
+    )
+    secret = models.CharField(
+        max_length=256,
+        blank=True,
+        help_text="The endpoint's secret, used to generate webhook signatures.",
+    )
+    status = StripeEnumField(
+        enum=WebhookEndpointStatus,
+        help_text="The status of the webhook. It can be enabled or disabled.",
+    )
+    url = models.URLField(help_text="The URL of the webhook endpoint.", max_length=2048)
+    application = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="The ID of the associated Connect application.",
+    )
+
+
 def _get_version():
     from ..apps import __version__
 
     return __version__
+
+
+def get_remote_ip(request):
+    """Given the HTTPRequest object return the IP Address of the client
+
+    :param request: client request
+    :type request: HTTPRequest
+
+    :Returns: the client ip address
+    """
+
+    # HTTP_X_FORWARDED_FOR is relevant for django running behind a proxy
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0]
+    else:
+        ip = request.META.get("REMOTE_ADDR")
+
+    if not ip:
+        warnings.warn(
+            "Could not determine remote IP (missing REMOTE_ADDR). "
+            "This is likely an issue with your wsgi/server setup."
+        )
+        ip = "0.0.0.0"
+
+    return ip
 
 
 class WebhookEventTrigger(models.Model):
@@ -96,13 +148,7 @@ class WebhookEventTrigger(models.Model):
         except Exception:
             body = "(error decoding body)"
 
-        ip = request.META.get("REMOTE_ADDR")
-        if not ip:
-            warnings.warn(
-                "Could not determine remote IP (missing REMOTE_ADDR). "
-                "This is likely an issue with your wsgi/server setup."
-            )
-            ip = "0.0.0.0"
+        ip = get_remote_ip(request)
 
         try:
             data = json.loads(body)

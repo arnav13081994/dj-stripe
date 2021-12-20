@@ -13,7 +13,13 @@ from stripe.error import InvalidRequestError
 
 from djstripe.utils import get_friendly_currency_amount
 
-from ..fields import JSONField, StripeDateTimeField, StripeForeignKey, StripeIdField
+from ..fields import (
+    JSONField,
+    StripeDateTimeField,
+    StripeForeignKey,
+    StripeIdField,
+    StripePercentField,
+)
 from ..managers import StripeModelManager
 from ..settings import djstripe_settings
 
@@ -336,14 +342,15 @@ class StripeModel(StripeBaseModel):
             if field.name.startswith("djstripe_") or field.name in ignore_fields:
                 continue
             if isinstance(field, models.ForeignKey):
-                field_data, skip = cls._stripe_object_field_to_foreign_key(
+                field_data, skip, is_nulled = cls._stripe_object_field_to_foreign_key(
                     field=field,
                     manipulated_data=manipulated_data,
                     current_ids=current_ids,
                     pending_relations=pending_relations,
                     stripe_account=stripe_account,
                 )
-                if skip:
+
+                if skip and not is_nulled:
                     continue
             else:
                 if hasattr(field, "stripe_to_db"):
@@ -418,18 +425,32 @@ class StripeModel(StripeBaseModel):
 
         field_data = None
         field_name = field.name
-        raw_field_data = manipulated_data.get(field_name)
         refetch = False
         skip = False
+        # a flag to indicate if the given field is null upstream on Stripe
+        is_nulled = False
 
         if issubclass(field.related_model, StripeModel) or issubclass(
             field.related_model, DjstripePaymentMethod
         ):
+
+            if field_name in manipulated_data:
+                raw_field_data = manipulated_data.get(field_name)
+
+                # field's value is None. Skip syncing but set as None.
+                # Otherwise nulled FKs sync gets skipped.
+                if not raw_field_data:
+                    is_nulled = True
+                    skip = True
+
+            else:
+                # field does not exist in manipulated_data dict. Skip Syncing
+                skip = True
+                raw_field_data = None
+
             id_ = cls._id_from_data(raw_field_data)
 
-            if not raw_field_data:
-                skip = True
-            elif id_ == raw_field_data:
+            if id_ == raw_field_data:
                 # A field like {"subscription": "sub_6lsC8pt7IcFpjA", ...}
                 refetch = True
             else:
@@ -445,8 +466,8 @@ class StripeModel(StripeBaseModel):
                     pending_relations.append((object_id, field, id_))
                 skip = True
 
-            if not skip:
-
+            # sync only if field exists and is not null
+            if not skip and not is_nulled:
                 # add the id of the current object to the list
                 # of ids being processed.
                 # This will avoid infinite recursive syncs in case a relatedmodel
@@ -470,7 +491,7 @@ class StripeModel(StripeBaseModel):
             # eg PaymentMethod, handled in hooks
             skip = True
 
-        return field_data, skip
+        return field_data, skip, is_nulled
 
     @classmethod
     def is_valid_object(cls, data):
@@ -925,6 +946,11 @@ class StripeModel(StripeBaseModel):
             instance._attach_objects_hook(cls, data, current_ids=current_ids)
             instance.save()
             instance._attach_objects_post_save_hook(cls, data)
+
+        for field in instance._meta.concrete_fields:
+            if isinstance(field, StripePercentField):
+                # get rid of cached values
+                delattr(instance, field.name)
 
         return instance
 

@@ -365,6 +365,66 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
             },
         )
 
+    @patch("stripe.Customer.retrieve", autospec=True)
+    @patch(
+        "stripe.PaymentMethod.retrieve", return_value=deepcopy(FAKE_PAYMENT_METHOD_I)
+    )
+    def test_customer_sync_null_default_payment_method(
+        self, attach_mock, customer_retrieve_mock
+    ):
+        """Test to make sure a custom'er default_payment_method gets updated to None
+        if they remove their only attached payment method"""
+        Customer.objects.all().delete()
+        PaymentMethod.objects.all().delete()
+
+        customer_fake = deepcopy(FAKE_CUSTOMER)
+        customer_fake["invoice_settings"][
+            "default_payment_method"
+        ] = FAKE_PAYMENT_METHOD_I["id"]
+        customer_retrieve_mock.return_value = customer_fake
+
+        customer = Customer.sync_from_stripe_data(customer_fake)
+        self.assertEqual(
+            customer.default_payment_method.id,
+            customer_fake["invoice_settings"]["default_payment_method"],
+        )
+        self.assertEqual(customer.payment_methods.count(), 1)
+
+        self.assert_fks(
+            customer,
+            expected_blank_fks={
+                "djstripe.Customer.coupon",
+                "djstripe.Customer.subscriber",
+            },
+        )
+
+        # update customer_retrieve_mock return value
+        customer_fake = deepcopy(FAKE_CUSTOMER)
+        customer_fake["invoice_settings"]["default_payment_method"] = None
+        customer_retrieve_mock.return_value = customer_fake
+
+        # now detach the payment method from customer
+        is_detached = customer.default_payment_method.detach()
+        assert is_detached is True
+
+        # refresh customer from db
+        customer.refresh_from_db()
+
+        self.assertEqual(
+            customer.default_payment_method,
+            None,
+        )
+        self.assertEqual(customer.payment_methods.count(), 0)
+
+        self.assert_fks(
+            customer,
+            expected_blank_fks={
+                "djstripe.Customer.coupon",
+                "djstripe.Customer.subscriber",
+                "djstripe.Customer.default_payment_method",
+            },
+        )
+
     @patch(
         "stripe.Customer.delete_source",
         autospec=IS_STATICMETHOD_AUTOSPEC_SUPPORTED,
@@ -522,7 +582,8 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         "stripe.Customer.retrieve", return_value=deepcopy(FAKE_CUSTOMER), autospec=True
     )
     def test_add_card_set_default_false(self, customer_retrieve_mock):
-        self.customer.add_card(FAKE_CARD["id"], set_default=False)
+
+        # self.customer already has FAKE_CARD as its default payment method
         self.customer.add_card(FAKE_CARD_III["id"], set_default=False)
 
         self.assertEqual(2, Card.objects.count())
@@ -534,9 +595,19 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
     def test_add_card_set_default_false_with_single_card_still_becomes_default(
         self, customer_retrieve_mock
     ):
+        # delete all already added cards to self.customer
+        Card.objects.all().delete()
+
+        # assert self.customer has no cards
+        self.assertEqual(0, self.customer.legacy_cards.count())
+        self.assertEqual(0, self.customer.sources.count())
+
         self.customer.add_card(FAKE_CARD["id"], set_default=False)
 
-        self.assertEqual(2, Card.objects.count())
+        # assert new card got added to self.customer
+        self.assertEqual(1, Card.objects.count())
+
+        # self.customer already has FAKE_CARD as its default payment method
         self.assertEqual(FAKE_CARD["id"], self.customer.default_source.id)
 
     @patch(
