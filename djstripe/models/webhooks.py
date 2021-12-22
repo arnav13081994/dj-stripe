@@ -29,9 +29,16 @@ class WebhookEndpoint(StripeModel):
         blank=True,
         help_text="The API version events are rendered as for this webhook endpoint.",
     )
+    enabled_events = JSONField(
+        help_text=(
+            "The list of events to enable for this endpoint. "
+            "['*'] indicates that all events are enabled, except those that require explicit selection."
+        )
+    )
     secret = models.CharField(
         max_length=256,
         blank=True,
+        editable=False,
         help_text="The endpoint's secret, used to generate webhook signatures.",
     )
     status = StripeEnumField(
@@ -46,9 +53,13 @@ class WebhookEndpoint(StripeModel):
     )
 
     djstripe_uuid = models.UUIDField(
+        unique=True,
         default=uuid4,
         help_text="A UUID specific to dj-stripe generated for the endpoint",
     )
+
+    def __str__(self):
+        return self.url or str(self.djstripe_uuid)
 
 
 def _get_version():

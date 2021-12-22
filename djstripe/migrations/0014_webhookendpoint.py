@@ -69,11 +69,21 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "enabled_events",
+                    djstripe.fields.JSONField(
+                        help_text=(
+                            "The list of events to enable for this endpoint. "
+                            "['*'] indicates that all events are enabled, except those that require explicit selection."
+                        )
+                    ),
+                ),
+                (
                     "secret",
                     models.CharField(
                         blank=True,
                         help_text="The endpoint's secret, used to generate webhook signatures.",
                         max_length=256,
+                        editable=False,
                     ),
                 ),
                 (
@@ -112,6 +122,7 @@ class Migration(migrations.Migration):
                 (
                     "djstripe_uuid",
                     models.UUIDField(
+                        unique=True,
                         default=uuid.uuid4,
                         help_text="A UUID specific to dj-stripe generated for the endpoint",
                     ),
