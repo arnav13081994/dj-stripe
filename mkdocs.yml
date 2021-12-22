@@ -45,6 +45,12 @@ plugins:
         - .
       enable_inventory: true
 
+  - mike:
+      canonical_version: null  # the version for <link rel="canonical">; `null`
+                               # uses the version specified via `mike deploy`
+
+
+
 nav:
   - Home: README.md
   - Sponsors: project/sponsors.md

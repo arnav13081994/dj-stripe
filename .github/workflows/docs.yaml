@@ -2,13 +2,26 @@ name: Build and deploy docs
 
 on:
   push:
-    branches: [master]
+    branches:
+      - "master"
+      - "stable/2.7"
+      - "stable/2.6"
+      - "stable/2.5"
+      - "stable/2.4"
+      - "stable/2.3"
+      - "stable/2.2"
+      - "stable/2.1"
+      - "stable/2.0"
+      - "stable/1.2"
+      - "stable/1.1"
+      - "stable/1.0"
 
   workflow_dispatch: # to trigger manually
 
 env:
   POETRY_VERSION: "1.1.11"
   POETRY_VIRTUALENVS_IN_PROJECT: "1"
+  LATEST_STABLE_BRANCH: "stable/2.5"
 
 jobs:
 
@@ -49,5 +62,11 @@ jobs:
     - name: Install dependencies
       run: poetry install -E docs
 
-    - name: Deploy docs to Github Pages
-      run: poetry run mkdocs gh-deploy --force
+    - name: Set default docs to ${{env.LATEST_STABLE_BRANCH}}
+      run: poetry run mike set-default --branch "gh-pages-${{env.LATEST_STABLE_BRANCH}}"  "${{env.LATEST_STABLE_BRANCH}}"
+
+    - name: Deploy (and Update) docs, to "gh-pages-${{env.LATEST_STABLE_BRANCH}}" branch, for the branch, ${GITHUB_REF##*/}
+      run: poetry run mike deploy --push --force --branch "gh-pages-${GITHUB_REF##*/}" "${GITHUB_REF##*/}"
+
+    # - name: Deploy docs to Github Pages
+    #   run: poetry run mkdocs gh-deploy --force
