@@ -65,6 +65,7 @@ jobs:
     - name: Set default docs to ${{env.LATEST_STABLE_BRANCH##*/}}
       run: poetry run mike set-default --branch "gh-pages-${{env.LATEST_STABLE_BRANCH##*/}}"  "${{env.LATEST_STABLE_BRANCH##*/}}"
 
+
     - name: Deploy (and Update) docs, to "gh-pages-${{env.LATEST_STABLE_BRANCH}}" branch, for the branch, ${GITHUB_REF##*/}
       run: poetry run mike deploy --push --force --branch "gh-pages-${GITHUB_REF##*/}" "${GITHUB_REF##*/}"
 
