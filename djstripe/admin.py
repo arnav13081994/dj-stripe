@@ -4,10 +4,13 @@ Django Administration interface definitions
 import json
 
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.utils import display_for_field, display_for_value
+from django.http.response import HttpResponseRedirect
 from django.urls import reverse
 from jsonfield import JSONField
+
+from djstripe.models.account import Account
 
 from . import models
 
@@ -589,11 +592,11 @@ class WebhookEndpointAdminCreateForm(forms.ModelForm):
     class Meta:
         model = models.WebhookEndpoint
         fields = (
-            "livemode",
-            "djstripe_owner_account",
-            "description",
-            "base_url",
             "api_version",
+            "base_url",
+            "description",
+            "djstripe_owner_account",
+            "livemode",
             "metadata",
         )
 
@@ -635,9 +638,14 @@ class WebhookEndpointAdminEditForm(forms.ModelForm):
 @admin.register(models.WebhookEndpoint)
 class WebhookEndpointAdmin(admin.ModelAdmin):
     change_form_template = "djstripe/admin/change_form.html"
-    readonly_fields = ("url",)
+    # add_form_template = "djstripe/admin/add_form.html"
+    readonly_fields = ("url", "djstripe_owner_account")
 
     def get_form(self, request, obj=None, **kwargs):
+        # # todo this will definitely affect the speed so reconsider
+        # # ensure the list of djstripe_owner_account is up to date
+        # management.call_command("djstripe_sync_models", "Account")
+
         if obj:
             return WebhookEndpointAdminEditForm
         return WebhookEndpointAdminCreateForm
@@ -701,14 +709,20 @@ class WebhookEndpointAdmin(admin.ModelAdmin):
             else:
                 url = obj.url
 
-            stripe_we = obj._api_update(
-                url=url,
-                description=obj.description,
-                enabled_events=obj.enabled_events,
-                metadata=obj.metadata,
-                disabled=form.data.get("enabled") != "on",
-            )
-            obj.__class__.sync_from_stripe_data(stripe_we)
+            try:
+                stripe_we = obj._api_update(
+                    url=url,
+                    description=obj.description,
+                    enabled_events=obj.enabled_events,
+                    metadata=obj.metadata,
+                    disabled=form.data.get("enabled") != "on",
+                    stripe_account=obj.djstripe_owner_account.id,
+                )
+                obj.__class__.sync_from_stripe_data(stripe_we)
+            except stripe.error.InvalidRequestError as error:
+                # todo figure out how to  send the form context back to be redisplayed
+                form.add_error(None, error)
+                raise
         else:
             # We are creating a new endpoint
             if base_url:
@@ -719,13 +733,42 @@ class WebhookEndpointAdmin(admin.ModelAdmin):
             metadata = obj.metadata or {}
             metadata["djstripe_uuid"] = str(obj.djstripe_uuid)
 
-            stripe_we = stripe.WebhookEndpoint.create(
-                url=url,
-                api_version=obj.api_version or None,
-                description=obj.description,
-                enabled_events=["*"],
-                metadata=metadata,
-            )
+            try:
+                stripe_we = stripe.WebhookEndpoint.create(
+                    url=url,
+                    api_version=obj.api_version or None,
+                    description=obj.description,
+                    enabled_events=["*"],
+                    metadata=metadata,
+                    stripe_account=Account.get_default_account().id,
+                )
 
-            new_obj = obj.__class__.sync_from_stripe_data(stripe_we)
-            obj.id = new_obj.id
+                new_obj = obj.__class__.sync_from_stripe_data(stripe_we)
+                obj.id = new_obj.id
+
+            except stripe.error.InvalidRequestError as error:
+                # todo figure out how to  send the form context back to be redisplayed
+                form.add_error(None, error)
+                raise
+                # from copy import deepcopy
+                # import json
+                # # form.add_error(None, error)
+                # new_dict = deepcopy(form.data)
+                # # new_error = deepcopy(error)
+                # new_dict["error"] = error.user_message
+                # new_error = json.dumps(new_dict)
+                # raise stripe.error.InvalidRequestError(new_error)
+
+    # import json
+
+    def _changeform_view(
+        self, request, object_id=None, form_url="", extra_context=None
+    ):
+
+        try:
+            return super()._changeform_view(request, object_id, form_url, extra_context)
+        except Exception as error:
+            # error = json.loads(error)
+            self.message_user(request, error, level=messages.ERROR)
+            # render(request, self.add_form_template, context)
+            return HttpResponseRedirect(request.path)
