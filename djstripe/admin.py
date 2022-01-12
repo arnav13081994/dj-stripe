@@ -274,6 +274,7 @@ class APIKeyAdminCreateForm(forms.ModelForm):
         model = models.APIKey
         fields = ["name", "secret"]
 
+    # todo add test
     def _post_clean(self):
         super()._post_clean()
 

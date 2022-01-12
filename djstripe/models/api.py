@@ -75,6 +75,7 @@ class APIKey(StripeModel):
     def __str__(self):
         return self.name or self.secret_redacted
 
+    # todo add test
     def clean(self):
         if self.livemode is None or self.type is None:
             try:
