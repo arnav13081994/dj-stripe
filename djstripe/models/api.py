@@ -4,8 +4,10 @@ from uuid import uuid4
 
 from django.core.validators import RegexValidator
 from django.db import models
+from django.forms import ValidationError
 
 from ..enums import APIKeyType
+from ..exceptions import InvalidStripeAPIKey
 from ..fields import StripeEnumField
 from .base import StripeModel
 
@@ -22,7 +24,7 @@ def generate_api_key_id() -> str:
 def get_api_key_details_by_prefix(api_key: str):
     sre = re.match(API_KEY_REGEX, api_key)
     if not sre:
-        raise ValueError(f"Invalid API key: {api_key!r}")
+        raise InvalidStripeAPIKey(f"Invalid API key: {api_key!r}")
 
     key_type = {
         "pk": APIKeyType.publishable,
@@ -61,10 +63,7 @@ class APIKey(StripeModel):
     )
 
     livemode = models.BooleanField(
-        help_text=(
-            "Whether the key is valid for live or test mode. "
-            "This is automatically detected when saved."
-        ),
+        help_text="Whether the key is valid for live or test mode."
     )
     description = None
     metadata = None
@@ -76,21 +75,12 @@ class APIKey(StripeModel):
     def __str__(self):
         return self.name or self.secret_redacted
 
-    def _clean_livemode_and_type(self):
-        if self.livemode is None or self.type is None:
-            self.type, self.livemode = get_api_key_details_by_prefix(self.secret)
-
     def clean(self):
-        self._clean_livemode_and_type()
-        if not self.djstripe_owner_account:
-            self.refresh_account()
-        return super().clean()
-
-    def save(self, *args, **kwargs):
-        self._clean_livemode_and_type()
-        if not self.djstripe_owner_account:
-            self.refresh_account(commit=False)
-        return super().save(*args, **kwargs)
+        if self.livemode is None or self.type is None:
+            try:
+                self.type, self.livemode = get_api_key_details_by_prefix(self.secret)
+            except InvalidStripeAPIKey as e:
+                raise ValidationError(str(e))
 
     def refresh_account(self, commit=True):
         from .account import Account

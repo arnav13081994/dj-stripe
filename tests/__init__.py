@@ -1816,13 +1816,20 @@ FAKE_USAGE_RECORD = {
 
 
 class UsageRecordSummaryDict(StripeItem):
-    def __init__(self, *args, **kwargs):
-        """Match Stripe's behavior: return a stripe iterable on `invoice.lines`."""
-        super().__init__(*args, **kwargs)
+    pass
 
 
 FAKE_USAGE_RECORD_SUMMARY = UsageRecordSummaryDict(
     load_fixture("usage_record_summary_sis_fakefakefakefakefake0001.json")
+)
+
+
+class WebhookEndpointDict(StripeItem):
+    pass
+
+
+FAKE_WEBHOOK_ENDPOINT_1 = WebhookEndpointDict(
+    load_fixture("webhook_endpoint_fake0001.json")
 )
 
 

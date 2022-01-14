@@ -45,7 +45,7 @@ class Account(StripeModel):
         )
     )
     email = models.CharField(
-        max_length=255, help_text="The primary user’s email address."
+        max_length=255, help_text="The primary user's email address."
     )
     # TODO external_accounts = ...
     individual = JSONField(
@@ -64,7 +64,7 @@ class Account(StripeModel):
         default="",
         blank=True,
         help_text="Internal-only description of the product sold or service provided "
-        "by the business. It’s used by Stripe for risk and underwriting purposes.",
+        "by the business. It's used by Stripe for risk and underwriting purposes.",
     )
     requirements = JSONField(
         null=True,
@@ -101,7 +101,7 @@ class Account(StripeModel):
     @property
     def business_url(self) -> str:
         """
-        The business’s publicly available website.
+        The business's publicly available website.
         """
         if self.business_profile:
             return self.business_profile.get("url", "")
@@ -162,7 +162,7 @@ class Account(StripeModel):
         )
 
     @classmethod
-    def _find_owner_account(cls, data):
+    def _find_owner_account(cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY):
         # Account model never has an owner account (it's always itself)
         return None
 
@@ -213,3 +213,10 @@ class Account(StripeModel):
                         pass
                     else:
                         raise
+                except stripe.error.AuthenticationError as e:
+                    # This may happen if saving an account that has a logo, using
+                    # a different API key to the default.
+                    # OK, concretely, there is a chicken-and-egg problem here.
+                    # But, the logo file object is not a particularly important thing.
+                    # Until we have a better solution, just ignore this error.
+                    pass

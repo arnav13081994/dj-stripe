@@ -11,7 +11,7 @@ import djstripe.models.api
 
 
 class Migration(migrations.Migration):
-    dependencies = [("djstripe", "0006_2_3")]
+    dependencies = [("djstripe", "0001_initial")]
 
     operations = [
         migrations.AlterField(
@@ -883,7 +883,7 @@ class Migration(migrations.Migration):
                     "default_settings",
                     djstripe.fields.JSONField(
                         blank=True,
-                        help_text="Object representing the subscription schedule’s default settings.",
+                        help_text="Object representing the subscription schedule's default settings.",
                         null=True,
                     ),
                 ),
@@ -899,7 +899,7 @@ class Migration(migrations.Migration):
                     "phases",
                     djstripe.fields.JSONField(
                         blank=True,
-                        help_text="Configuration for the subscription schedule’s phases.",
+                        help_text="Configuration for the subscription schedule's phases.",
                         null=True,
                     ),
                 ),
@@ -1057,7 +1057,7 @@ class Migration(migrations.Migration):
             name="calculated_statement_descriptor",
             field=models.CharField(
                 default="",
-                help_text="The full statement descriptor that is passed to card networks, and that is displayed on your customers’ credit card and bank statements. Allows you to see what the statement descriptor looks like after the static and dynamic portions are combined.",
+                help_text="The full statement descriptor that is passed to card networks, and that is displayed on your customers' credit card and bank statements. Allows you to see what the statement descriptor looks like after the static and dynamic portions are combined.",
                 max_length=22,
             ),
         ),
@@ -1123,7 +1123,7 @@ class Migration(migrations.Migration):
             name="statement_descriptor",
             field=models.CharField(
                 blank=True,
-                help_text="For card charges, use statement_descriptor_suffix instead. Otherwise, you can use this value as the complete description of a charge on your customers’ statements. Must contain at least one letter, maximum 22 characters.",
+                help_text="For card charges, use statement_descriptor_suffix instead. Otherwise, you can use this value as the complete description of a charge on your customers' statements. Must contain at least one letter, maximum 22 characters.",
                 max_length=22,
                 null=True,
             ),
@@ -1244,7 +1244,7 @@ class Migration(migrations.Migration):
                 (
                     "livemode",
                     models.BooleanField(
-                        help_text="Whether the key is valid for live or test mode. This is automatically detected when saved."
+                        help_text="Whether the key is valid for live or test mode."
                     ),
                 ),
                 (

@@ -9,10 +9,12 @@ from django.contrib.admin.utils import display_for_field, display_for_value
 from django.http.response import HttpResponseRedirect
 from django.urls import reverse
 from jsonfield import JSONField
+from stripe.error import AuthenticationError, InvalidRequestError
 
 from djstripe.models.account import Account
 
-from . import models
+from . import enums, models
+
 
 
 def custom_display_for_JSONfield(value, field, empty_value_display):
@@ -268,23 +270,45 @@ class AccountAdmin(StripeModelAdmin):
     search_fields = ("settings", "business_profile")
 
 
-# todo perhaps make the djstripe_owner_account modelfield updateable for pub and webhook secret since we cannot query stripe for that info?
+class APIKeyAdminCreateForm(forms.ModelForm):
+    class Meta:
+        model = models.APIKey
+        fields = ["name", "secret"]
+
+    def _post_clean(self):
+        super()._post_clean()
+
+        if not self.errors:
+            if (
+                self.instance.type == enums.APIKeyType.secret
+                and self.instance.djstripe_owner_account is None
+            ):
+                try:
+                    self.instance.refresh_account()
+                except AuthenticationError as e:
+                    self.add_error("secret", str(e))
+
+
 @admin.register(models.APIKey)
-class APIKeyAdmin(StripeModelAdmin):
-    list_display = ("type",)
-    list_filter = ("type",)
+class APIKeyAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "type", "djstripe_owner_account", "livemode")
+    readonly_fields = ("djstripe_owner_account", "livemode", "type", "secret")
     search_fields = ("name",)
 
-    get_fieldsets = admin.ModelAdmin.get_fieldsets
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ["djstripe_owner_account", "livemode", "type"]
+        return super().get_readonly_fields(request, obj=obj)
 
     def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        fields.remove("id")
-        fields.remove("created")
         if obj is None:
-            fields.remove("type")
-            fields.remove("livemode")
-        return fields
+            return APIKeyAdminCreateForm.Meta.fields
+        return ["type", "djstripe_owner_account", "livemode", "name", "secret"]
+
+    def get_form(self, request, obj=None, **kwargs):
+        if obj is None:
+            return APIKeyAdminCreateForm
+        return super().get_form(request, obj, **kwargs)
 
 
 @admin.register(models.BalanceTransaction)
@@ -398,6 +422,21 @@ class PaymentIntentAdmin(StripeModelAdmin):
     search_fields = ("customer__id", "invoice__id")
 
 
+@admin.register(models.Payout)
+class PayoutAdmin(StripeModelAdmin):
+    list_display = (
+        "destination",
+        "amount",
+        "arrival_date",
+        "method",
+        "status",
+        "type",
+    )
+    list_select_related = ("balance_transaction", "destination")
+    list_filter = ("destination__id",)
+    search_fields = ("destination__id", "balance_transaction__id")
+
+
 @admin.register(models.SetupIntent)
 class SetupIntentAdmin(StripeModelAdmin):
     list_display = (
@@ -439,6 +478,14 @@ class InvoiceAdmin(StripeModelAdmin):
     list_select_related = ("customer", "customer__subscriber")
     search_fields = ("customer__id", "number", "receipt_number")
     inlines = (InvoiceItemInline,)
+
+
+@admin.register(models.Mandate)
+class MandateAdmin(StripeModelAdmin):
+    list_display = ("status", "type", "payment_method")
+    list_filter = ("multi_use", "single_use")
+    list_select_related = ("payment_method",)
+    search_fields = ("payment_method__id",)
 
 
 @admin.register(models.Plan)
@@ -531,7 +578,15 @@ class SubscriptionAdmin(StripeModelAdmin):
     def _cancel(self, request, queryset):
         """Cancel a subscription."""
         for subscription in queryset:
-            subscription.cancel()
+            try:
+                instance = subscription.cancel()
+                self.message_user(
+                    request,
+                    f"Successfully Canceled: {instance}",
+                    level=messages.SUCCESS,
+                )
+            except InvalidRequestError as error:
+                self.message_user(request, error, level=messages.WARNING)
 
     _cancel.short_description = "Cancel selected subscriptions"  # type: ignore # noqa
 

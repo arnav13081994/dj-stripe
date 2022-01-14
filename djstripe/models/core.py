@@ -34,6 +34,26 @@ from .base import IdempotencyKey, StripeModel, logger
 djstripe_settings.set_stripe_api_version()
 
 
+def _sanitise_price(price=None, plan=None, **kwargs):
+    """
+    Helper for Customer.subscribe()
+    """
+
+    if price and plan:
+        raise TypeError("price and plan arguments cannot both be defined.")
+
+    price = price or plan
+
+    if not price:
+        raise TypeError("you need to set either price or plan")
+
+    # Convert Price to id
+    if isinstance(price, StripeModel):
+        price = price.id
+
+    return price, kwargs
+
+
 class BalanceTransaction(StripeModel):
     """
     A single transaction that updates the Stripe balance.
@@ -151,7 +171,7 @@ class Charge(StripeModel):
         max_length=22,
         default="",
         help_text="The full statement descriptor that is passed to card networks, "
-        "and that is displayed on your customers’ credit card and bank statements. "
+        "and that is displayed on your customers' credit card and bank statements. "
         "Allows you to see what the statement descriptor looks like after the "
         "static and dynamic portions are combined.",
     )
@@ -302,7 +322,7 @@ class Charge(StripeModel):
         blank=True,
         help_text="For card charges, use statement_descriptor_suffix instead. "
         "Otherwise, you can use this value as the complete description of a "
-        "charge on your customers’ statements. Must contain at least one letter, "
+        "charge on your customers' statements. Must contain at least one letter, "
         "maximum 22 characters.",
     )
     statement_descriptor_suffix = models.CharField(
@@ -427,7 +447,7 @@ class Mandate(StripeModel):
     stripe_class = stripe.Mandate
 
     customer_acceptance = JSONField(
-        help_text="Details about the customer’s acceptance of the mandate."
+        help_text="Details about the customer's acceptance of the mandate."
     )
     payment_method = StripeForeignKey("paymentmethod", on_delete=models.CASCADE)
     payment_method_details = JSONField(
@@ -831,42 +851,6 @@ class Customer(StripeModel):
         """
         return max(self.balance, 0)
 
-    @staticmethod
-    def _sanitise_price(price=None, plan=None, **kwargs):
-        """
-        Helper for Customer.subscribe()
-        """
-
-        if price and plan:
-            raise TypeError("price and plan arguments cannot both be defined.")
-
-        price = price or plan
-
-        if not price:
-            raise TypeError("you need to set either price or plan")
-
-        # Convert Price to id
-        if isinstance(price, StripeModel):
-            price = price.id
-
-        if "charge_immediately" in kwargs:
-            new_value = (
-                "charge_automatically"
-                if kwargs["charge_immediately"]
-                else "send_invoice"
-            )
-            warnings.warn(
-                "The `charge_immediately` parameter to Customer.subscribe()"
-                "does nothing since Stripe API 2019-10-17. dj-stripe 2.5+ "
-                "no longer supports it and it will be removed soon. "
-                f"Set `collection_method={new_value!r} instead`. ",
-                DeprecationWarning,
-            )
-            del kwargs["charge_immediately"]
-            kwargs.setdefault("collection_method", new_value)
-
-        return price, kwargs
-
     def subscribe(self, *, items=None, price=None, plan=None, **kwargs):
         """
         Subscribes this customer to all the prices or plans in the items dict (Recommended).
@@ -884,53 +868,27 @@ class Customer(StripeModel):
         """
         from .billing import Subscription
 
-        products_lst = []
-
         if (items and price) or (items and plan) or (price and plan):
             raise TypeError("Please define only one of items, price or plan arguments.")
 
-        if items:
+        if items is None:
+            _items = [{"price": price}]
+        else:
+            _items = []
             for item in items:
                 price = item.get("price", "")
                 plan = item.get("plan", "")
+                price, kwargs = _sanitise_price(price, plan, **kwargs)
+                if "price" in item:
+                    _items.append({"price": price})
+                if "plan" in item:
+                    _items.append({"plan": price})
 
-                price, kwargs = self._sanitise_price(price, plan, **kwargs)
+        stripe_subscription = Subscription._api_create(
+            items=_items, customer=self.id, **kwargs
+        )
 
-                # todo override Subscription.sync_from_stripe_data to attach all subscriptions to the customer using bulk updates
-                stripe_subscription = Subscription._api_create(
-                    items=[item], customer=self.id, **kwargs
-                )
-
-                Subscription.sync_from_stripe_data(stripe_subscription)
-
-                # get associated product
-                product_name = Price.objects.get(id=price).product.name
-                # keep count of products subscribed to
-                products_lst.append(product_name)
-
-        else:
-            warnings.warn(
-                "The Customer.subscribe() method will not be accepting price (or price id)"
-                " or plan (or plan id) arguments and support will be removed in dj-stripe 2.5+."
-                " Please default to using the items dictionary which will allow you to subscribe"
-                " the given customer to one or more than one plan in one go.",
-                DeprecationWarning,
-            )
-
-            price, kwargs = self._sanitise_price(price, plan, **kwargs)
-
-            stripe_subscription = Subscription._api_create(
-                items=[{"price": price}], customer=self.id, **kwargs
-            )
-
-            Subscription.sync_from_stripe_data(stripe_subscription)
-
-            # get associated product
-            product_name = Price.objects.get(id=price).product.name
-            # keep count of products subscribed to
-            products_lst.append(product_name)
-
-        return f"Subscribed {self} to {' and '.join(products_lst)}"
+        Subscription.sync_from_stripe_data(stripe_subscription)
 
     def charge(
         self,
@@ -1233,6 +1191,12 @@ class Customer(StripeModel):
     def can_charge(self):
         """Determines if this customer is able to be charged."""
 
+        warnings.warn(
+            "Customer.can_charge() is misleading and deprecated, will be removed in dj-stripe 2.8. "
+            "Look at Customer.payment_methods.all() instead.",
+            DeprecationWarning,
+        )
+
         return (
             self.has_valid_source() or self.default_payment_method is not None
         ) and self.date_purged is None
@@ -1267,6 +1231,11 @@ class Customer(StripeModel):
 
     def has_valid_source(self):
         """Check whether the customer has a valid payment source."""
+        warnings.warn(
+            "Customer.has_valid_source() is deprecated and will be removed in dj-stripe 2.8. "
+            "Use `Customer.default_source is not None` instead.",
+            DeprecationWarning,
+        )
         return self.default_source is not None
 
     def add_coupon(self, coupon, idempotency_key=None):
@@ -1415,7 +1384,7 @@ class Dispute(StripeModel):
         "account balance.",
     )
     balance_transactions = JSONField(
-        default="[]",
+        default=list,
         help_text="List of 0, 1 or 2 Balance Transactions that show funds withdrawn and reinstated to your Stripe account as a result of this dispute.",
     )
     # charge is nullable to avoid infinite sync as Charge model has a dispute field as well
@@ -1779,7 +1748,7 @@ class PaymentIntent(StripeModel):
         blank=True,
         help_text=(
             "Indicates that you intend to make future payments with this "
-            "PaymentIntent’s payment method. "
+            "PaymentIntent's payment method. "
             "If present, the payment method used with this PaymentIntent can "
             "be attached to a Customer, even after the transaction completes. "
             "Use `on_session` if you intend to only reuse the payment method "
@@ -1801,7 +1770,7 @@ class PaymentIntent(StripeModel):
         blank=True,
         help_text=(
             "For non-card charges, you can use this value as the complete description "
-            "that appears on your customers’ statements. Must contain at least one "
+            "that appears on your customers' statements. Must contain at least one "
             "letter, maximum 22 characters."
         ),
     )

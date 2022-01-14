@@ -3,15 +3,12 @@ import uuid
 from datetime import timedelta
 from typing import List, Optional
 
-import stripe
 from django.apps import apps
 from django.db import IntegrityError, models, transaction
 from django.utils import dateformat, timezone
 from django.utils.encoding import smart_str
 from stripe.api_resources.abstract.api_resource import APIResource
 from stripe.error import InvalidRequestError
-
-from djstripe.utils import get_friendly_currency_amount
 
 from ..fields import (
     JSONField,
@@ -22,6 +19,7 @@ from ..fields import (
 )
 from ..managers import StripeModelManager
 from ..settings import djstripe_settings
+from ..utils import get_friendly_currency_amount, get_id_from_stripe_data
 
 logger = logging.getLogger(__name__)
 
@@ -254,12 +252,6 @@ class StripeModel(StripeBaseModel):
             self.id, api_key=api_key, stripe_account=stripe_account, **kwargs
         )
 
-    def str_parts(self) -> List[str]:
-        """
-        Extend this to add information to the string representation of the object
-        """
-        return ["id={id}".format(id=self.id)]
-
     @classmethod
     def _manipulate_stripe_object_hook(cls, data):
         """
@@ -285,15 +277,16 @@ class StripeModel(StripeBaseModel):
             if data.get("object") == "event":
                 # if account key exists and has a not null value
                 if data.get("account"):
-                    stripe_account = cls._id_from_data(data.get("account"))
-                    if stripe_account:
-                        return Account._get_or_retrieve(id=stripe_account)
+                    stripe_account_id = get_id_from_stripe_data(data.get("account"))
+                    if stripe_account_id:
+                        return Account._get_or_retrieve(id=stripe_account_id)
 
             else:
-                if getattr(data, "stripe_account", ""):
-                    stripe_account = cls._id_from_data(data.stripe_account)
-                    if stripe_account:
-                        return Account._get_or_retrieve(id=stripe_account)
+                stripe_account = getattr(data, "stripe_account", None)
+                if stripe_account:
+                    stripe_account_id = get_id_from_stripe_data(stripe_account)
+                    if stripe_account_id:
+                        return Account._get_or_retrieve(id=stripe_account_id)
 
         # try to fetch by the given api_key.
         return Account.get_or_retrieve_for_api_key(api_key)
@@ -338,10 +331,28 @@ class StripeModel(StripeBaseModel):
         # Iterate over all the fields that we know are related to Stripe,
         # let each field work its own magic
         ignore_fields = ["date_purged", "subscriber"]  # XXX: Customer hack
-        for field in cls._meta.fields:
+
+        # get all forward and reverse relations for given cls
+        for field in cls._meta.get_fields():
             if field.name.startswith("djstripe_") or field.name in ignore_fields:
                 continue
-            if isinstance(field, models.ForeignKey):
+
+            # todo add support reverse ManyToManyField sync
+            if isinstance(
+                field, (models.ManyToManyRel, models.ManyToOneRel)
+            ) and not isinstance(field, models.OneToOneRel):
+                # We don't currently support syncing from
+                # reverse side of Many relationship
+                continue
+
+            # todo for ManyToManyField one would also need to handle the case of an intermediate model being used
+            # todo add support ManyToManyField sync
+            if field.many_to_many:
+                # We don't currently support syncing ManyToManyField
+                continue
+
+            # will work for Forward FK and OneToOneField relations and reverse OneToOneField relations
+            if isinstance(field, (models.ForeignKey, models.OneToOneRel)):
                 field_data, skip, is_nulled = cls._stripe_object_field_to_foreign_key(
                     field=field,
                     manipulated_data=manipulated_data,
@@ -375,25 +386,6 @@ class StripeModel(StripeBaseModel):
             result["djstripe_owner_account"] = owner_account
 
         return result
-
-    @classmethod
-    def _id_from_data(cls, data):
-        """
-        Extract stripe id from stripe field data
-        :param data:
-        :return:
-        """
-
-        if isinstance(data, str):
-            # data like "sub_6lsC8pt7IcFpjA"
-            id_ = data
-        elif data:
-            # data like {"id": sub_6lsC8pt7IcFpjA", ...}
-            id_ = data.get("id")
-        else:
-            id_ = None
-
-        return id_
 
     @classmethod
     def _stripe_object_field_to_foreign_key(
@@ -448,7 +440,7 @@ class StripeModel(StripeBaseModel):
                 skip = True
                 raw_field_data = None
 
-            id_ = cls._id_from_data(raw_field_data)
+            id_ = get_id_from_stripe_data(raw_field_data)
 
             if id_ == raw_field_data:
                 # A field like {"subscription": "sub_6lsC8pt7IcFpjA", ...}
@@ -533,12 +525,18 @@ class StripeModel(StripeBaseModel):
                     # the target instance now exists
                     target = field.model.objects.get(id=object_id)
                     setattr(target, field.name, self)
-                    target.save()
+                    if isinstance(field, models.OneToOneRel):
+                        # this is a reverse relationship, so the relation exists on self
+                        self.save()
+                    else:
+                        # this is a forward relation on the target,
+                        # so we need to save it
+                        target.save()
 
-                    # reload so that indirect relations back to this object
-                    # eg self.charge.invoice = self are set
-                    # TODO - reverse the field reference here to avoid hitting the DB?
-                    self.refresh_from_db()
+                        # reload so that indirect relations back to this object
+                        # eg self.charge.invoice = self are set
+                        # TODO - reverse the field reference here to avoid hitting the DB?
+                        self.refresh_from_db()
                 else:
                     unprocessed_pending_relations.append(post_save_relation)
 
@@ -572,6 +570,7 @@ class StripeModel(StripeBaseModel):
         :type stripe_account: string
         :returns: The instantiated object.
         """
+        # TODO dictionary unpacking will not work if cls has any ManyToManyField
         instance = cls(
             **cls._stripe_object_to_record(
                 data,
@@ -626,7 +625,7 @@ class StripeModel(StripeBaseModel):
         if pending_relations is None:
             pending_relations = []
 
-        id_ = cls._id_from_data(field)
+        id_ = get_id_from_stripe_data(field)
 
         if not field:
             # An empty field - We need to return nothing here because there is
@@ -979,7 +978,7 @@ class StripeModel(StripeBaseModel):
         return instance
 
     def __str__(self):
-        return smart_str("<{list}>".format(list=", ".join(self.str_parts())))
+        return f"<id={self.id}>"
 
 
 class IdempotencyKey(models.Model):

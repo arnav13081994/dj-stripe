@@ -14,6 +14,7 @@ from ..fields import (
     StripeForeignKey,
 )
 from ..settings import djstripe_settings
+from ..utils import get_id_from_stripe_data
 from .account import Account
 from .base import StripeModel, logger
 from .core import Customer
@@ -95,7 +96,7 @@ class DjstripePaymentMethod(models.Model):
     ):
 
         raw_field_data = data.get(field_name)
-        id_ = StripeModel._id_from_data(raw_field_data)
+        id_ = get_id_from_stripe_data(raw_field_data)
 
         if id_.startswith("card"):
             source_cls = Card
@@ -407,10 +408,9 @@ class BankAccount(LegacySourceMixin, StripeModel):
             customer_template = f"{self.bank_name} {self.routing_number} ({self.human_readable_status}) {'Default' if default else ''} {self.currency}"
             return customer_template
 
-        elif self.account:
-            default = getattr(self, "default_for_currency", False)
-            account_template = f"{self.bank_name} {self.currency} {'Default' if default else ''} {self.routing_number} {self.last4}"
-            return account_template
+        default = getattr(self, "default_for_currency", False)
+        account_template = f"{self.bank_name} {self.currency} {'Default' if default else ''} {self.routing_number} {self.last4}"
+        return account_template
 
     @property
     def human_readable_status(self):
@@ -685,13 +685,8 @@ class Source(StripeModel):
     stripe_class = stripe.Source
     stripe_dashboard_item_name = "sources"
 
-    def str_parts(self):
-        return [
-            f"type={self.type}",
-            f"status={self.status}",
-            f"customer={self.customer}",
-            f"usage={self.usage}",
-        ] + super().str_parts()
+    def __str__(self):
+        return f"{self.type} {self.id}"
 
     @classmethod
     def _manipulate_stripe_object_hook(cls, data):
@@ -702,7 +697,7 @@ class Source(StripeModel):
     def _attach_objects_hook(self, cls, data, current_ids=None):
         customer = None
         # "customer" key could be like "cus_6lsBvm5rJ0zyHc" or {"id": "cus_6lsBvm5rJ0zyHc"}
-        customer_id = cls._id_from_data(data.get("customer"))
+        customer_id = get_id_from_stripe_data(data.get("customer"))
 
         if current_ids is None or customer_id not in current_ids:
             customer = cls._stripe_object_to_customer(
@@ -877,7 +872,7 @@ class PaymentMethod(StripeModel):
     def _attach_objects_hook(self, cls, data, current_ids=None):
         customer = None
         # "customer" key could be like "cus_6lsBvm5rJ0zyHc" or {"id": "cus_6lsBvm5rJ0zyHc"}
-        customer_id = cls._id_from_data(data.get("customer"))
+        customer_id = get_id_from_stripe_data(data.get("customer"))
 
         if current_ids is None or customer_id not in current_ids:
             customer = cls._stripe_object_to_customer(
