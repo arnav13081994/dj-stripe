@@ -1378,14 +1378,16 @@ class Subscription(StripeModel):
         "because the customer was switched to a subscription to a new plan), "
         "the date the subscription ended.",
     )
-    latest_invoice = StripeForeignKey(
-        "Invoice",
-        null=True,
-        blank=True,
-        related_name="+",
-        on_delete=models.SET_NULL,
-        help_text="The most recent invoice this subscription has generated.",
-    )
+    # Removed until webhooks can be handled properly using cooperative multi-tasking
+    # Issue: #1560, #1552
+    # latest_invoice = StripeForeignKey(
+    #     "Invoice",
+    #     null=True,
+    #     blank=True,
+    #     related_name="+",
+    #     on_delete=models.SET_NULL,
+    #     help_text="The most recent invoice this subscription has generated.",
+    # )
     next_pending_invoice_item_invoice = StripeDateTimeField(
         null=True,
         blank=True,
