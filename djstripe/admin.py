@@ -13,6 +13,7 @@ from jsonfield import JSONField
 from stripe.error import AuthenticationError, InvalidRequestError
 
 from . import enums, models
+from .utils import warn_about_unregistered_in_admin_models
 
 
 def custom_display_for_JSONfield(value, field, empty_value_display):
@@ -877,3 +878,7 @@ class WebhookEndpointAdmin(admin.ModelAdmin):
                 raise
 
         return super().delete_model(request, obj)
+
+
+# run warnings after all models have been registered
+warn_about_unregistered_in_admin_models()
