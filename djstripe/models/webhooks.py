@@ -64,12 +64,16 @@ class WebhookEndpoint(StripeModel):
     def __str__(self):
         return self.url or str(self.djstripe_uuid)
 
-    def _attach_objects_hook(self, cls, data, current_ids=None):
+    def _attach_objects_hook(
+        self, cls, data, current_ids=None, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Gets called by this object's create and sync methods just before save.
         Use this to populate fields before the model is saved.
         """
-        super()._attach_objects_hook(cls, data, current_ids=current_ids)
+        super()._attach_objects_hook(
+            cls, data, current_ids=current_ids, api_key=api_key
+        )
 
         self.djstripe_uuid = data.get("metadata", {}).get("djstripe_uuid")
 
@@ -205,16 +209,20 @@ class WebhookEventTrigger(models.Model):
             stripe_trigger_account=stripe_account,
             webhook_endpoint=webhook_endpoint,
         )
+        api_key = (
+            stripe_account.default_api_key
+            or djstripe_settings.get_default_api_key(obj.livemode)
+        )
 
         try:
-            obj.valid = obj.validate(secret=secret)
+            obj.valid = obj.validate(secret=secret, api_key=api_key)
             if obj.valid:
                 if djstripe_settings.WEBHOOK_EVENT_CALLBACK:
                     # If WEBHOOK_EVENT_CALLBACK, pass it for processing
                     djstripe_settings.WEBHOOK_EVENT_CALLBACK(obj)
                 else:
                     # Process the item (do not save it, it'll get saved below)
-                    obj.process(save=False, api_key=stripe_account.default_api_key)
+                    obj.process(save=False, api_key=api_key)
         except Exception as e:
             max_length = WebhookEventTrigger._meta.get_field("exception").max_length
             obj.exception = str(e)[:max_length]

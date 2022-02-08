@@ -360,6 +360,7 @@ class StripeModel(StripeBaseModel):
                     current_ids=current_ids,
                     pending_relations=pending_relations,
                     stripe_account=stripe_account,
+                    api_key=api_key,
                 )
 
                 if skip and not is_nulled:
@@ -396,6 +397,7 @@ class StripeModel(StripeBaseModel):
         current_ids=None,
         pending_relations=None,
         stripe_account=None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
     ):
         """
         This converts a stripe API field to the dj stripe object it references,
@@ -474,6 +476,7 @@ class StripeModel(StripeBaseModel):
                     current_ids=current_ids,
                     pending_relations=pending_relations,
                     stripe_account=stripe_account,
+                    api_key=api_key,
                 )
 
                 # Remove the id of the current object from the list
@@ -493,7 +496,9 @@ class StripeModel(StripeBaseModel):
         """
         return "object" in data and data["object"] == cls.stripe_class.OBJECT_NAME
 
-    def _attach_objects_hook(self, cls, data, current_ids=None):
+    def _attach_objects_hook(
+        self, cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY, current_ids=None
+    ):
         """
         Gets called by this object's create and sync methods just before save.
         Use this to populate fields before the model is saved.
@@ -507,7 +512,13 @@ class StripeModel(StripeBaseModel):
 
         pass
 
-    def _attach_objects_post_save_hook(self, cls, data, pending_relations=None):
+    def _attach_objects_post_save_hook(
+        self,
+        cls,
+        data,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+        pending_relations=None,
+    ):
         """
         Gets called by this object's create and sync methods just after save.
         Use this to populate fields after the model is saved.
@@ -553,7 +564,7 @@ class StripeModel(StripeBaseModel):
         pending_relations=None,
         save=True,
         stripe_account=None,
-        api_key: str = None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
     ):
         """
         Instantiates a model instance using the provided data object received
@@ -572,9 +583,6 @@ class StripeModel(StripeBaseModel):
         :type stripe_account: string
         :returns: The instantiated object.
         """
-        if api_key is None:
-            api_key = djstripe_settings.STRIPE_SECRET_KEY
-
         stripe_data = cls._stripe_object_to_record(
             data,
             current_ids=current_ids,
@@ -595,13 +603,15 @@ class StripeModel(StripeBaseModel):
             # TODO dictionary unpacking will not work if cls has any ManyToManyField
             instance = cls(**stripe_data)
 
-            instance._attach_objects_hook(cls, data, current_ids=current_ids)
+            instance._attach_objects_hook(
+                cls, data, api_key=api_key, current_ids=current_ids
+            )
 
             if save:
                 instance.save()
 
             instance._attach_objects_post_save_hook(
-                cls, data, pending_relations=pending_relations
+                cls, data, api_key=api_key, pending_relations=pending_relations
             )
 
         return instance
@@ -673,7 +683,9 @@ class StripeModel(StripeBaseModel):
                 # If field_name="default_source", we get_or_create the card instead.
                 cls_instance = cls(id=id_)
                 try:
-                    data = cls_instance.api_retrieve(stripe_account=stripe_account)
+                    data = cls_instance.api_retrieve(
+                        stripe_account=stripe_account, api_key=api_key
+                    )
                 except InvalidRequestError as e:
                     if "a similar object exists in" in str(e):
                         # HACK around a Stripe bug.
@@ -726,7 +738,13 @@ class StripeModel(StripeBaseModel):
             return cls.stripe_objects.get(id=id_), False
 
     @classmethod
-    def _stripe_object_to_customer(cls, target_cls, data, current_ids=None):
+    def _stripe_object_to_customer(
+        cls,
+        target_cls,
+        data,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+        current_ids=None,
+    ):
         """
         Search the given manager for the Customer matching this object's
         ``customer`` field.
@@ -740,11 +758,13 @@ class StripeModel(StripeBaseModel):
 
         if "customer" in data and data["customer"]:
             return target_cls._get_or_create_from_stripe_object(
-                data, "customer", current_ids=current_ids
+                data, "customer", current_ids=current_ids, api_key=api_key
             )[0]
 
     @classmethod
-    def _stripe_object_to_default_tax_rates(cls, target_cls, data):
+    def _stripe_object_to_default_tax_rates(
+        cls, target_cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Retrieves TaxRates for a Subscription or Invoice
         :param target_cls:
@@ -757,14 +777,16 @@ class StripeModel(StripeBaseModel):
 
         for tax_rate_data in data.get("default_tax_rates", []):
             tax_rate, _ = target_cls._get_or_create_from_stripe_object(
-                tax_rate_data, refetch=False
+                tax_rate_data, refetch=False, api_key=api_key
             )
             tax_rates.append(tax_rate)
 
         return tax_rates
 
     @classmethod
-    def _stripe_object_to_tax_rates(cls, target_cls, data):
+    def _stripe_object_to_tax_rates(
+        cls, target_cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Retrieves TaxRates for a SubscriptionItem or InvoiceItem
         :param target_cls:
@@ -775,14 +797,16 @@ class StripeModel(StripeBaseModel):
 
         for tax_rate_data in data.get("tax_rates", []):
             tax_rate, _ = target_cls._get_or_create_from_stripe_object(
-                tax_rate_data, refetch=False
+                tax_rate_data, refetch=False, api_key=api_key
             )
             tax_rates.append(tax_rate)
 
         return tax_rates
 
     @classmethod
-    def _stripe_object_set_total_tax_amounts(cls, target_cls, data, instance):
+    def _stripe_object_set_total_tax_amounts(
+        cls, target_cls, data, instance, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Set total tax amounts on Invoice instance
         :param target_cls:
@@ -801,7 +825,10 @@ class StripeModel(StripeBaseModel):
                 tax_rate_data = {"tax_rate": tax_rate_data}
 
             tax_rate, _ = TaxRate._get_or_create_from_stripe_object(
-                tax_rate_data, field_name="tax_rate", refetch=True
+                tax_rate_data,
+                field_name="tax_rate",
+                refetch=True,
+                api_key=api_key,
             )
             tax_amount, _ = target_cls.objects.update_or_create(
                 invoice=instance,
@@ -817,7 +844,9 @@ class StripeModel(StripeBaseModel):
         instance.total_tax_amounts.exclude(pk__in=pks).delete()
 
     @classmethod
-    def _stripe_object_to_invoice_items(cls, target_cls, data, invoice):
+    def _stripe_object_to_invoice_items(
+        cls, target_cls, data, invoice, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Retrieves InvoiceItems for an invoice.
 
@@ -862,14 +891,16 @@ class StripeModel(StripeBaseModel):
             line.setdefault("date", int(dateformat.format(invoice.created, "U")))
 
             item, _ = target_cls._get_or_create_from_stripe_object(
-                line, refetch=False, save=save
+                line, refetch=False, save=save, api_key=api_key
             )
             invoiceitems.append(item)
 
         return invoiceitems
 
     @classmethod
-    def _stripe_object_to_subscription_items(cls, target_cls, data, subscription):
+    def _stripe_object_to_subscription_items(
+        cls, target_cls, data, subscription, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Retrieves SubscriptionItems for a subscription.
 
@@ -892,7 +923,7 @@ class StripeModel(StripeBaseModel):
         subscriptionitems = []
         for item_data in items.auto_paging_iter():
             item, _ = target_cls._get_or_create_from_stripe_object(
-                item_data, refetch=False
+                item_data, refetch=False, api_key=api_key
             )
 
             # sync the SubscriptionItem
@@ -905,7 +936,9 @@ class StripeModel(StripeBaseModel):
         return subscriptionitems
 
     @classmethod
-    def _stripe_object_to_refunds(cls, target_cls, data, charge):
+    def _stripe_object_to_refunds(
+        cls, target_cls, data, charge, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         """
         Retrieves Refunds for a charge
         :param target_cls: The target class to instantiate per refund
@@ -924,7 +957,9 @@ class StripeModel(StripeBaseModel):
         refund_objs = []
         for refund_data in refunds.auto_paging_iter():
             item, _ = target_cls._get_or_create_from_stripe_object(
-                refund_data, refetch=False
+                refund_data,
+                refetch=False,
+                api_key=api_key,
             )
             refund_objs.append(item)
 
@@ -961,9 +996,11 @@ class StripeModel(StripeBaseModel):
             record_data = cls._stripe_object_to_record(data, api_key=api_key)
             for attr, value in record_data.items():
                 setattr(instance, attr, value)
-            instance._attach_objects_hook(cls, data, current_ids=current_ids)
+            instance._attach_objects_hook(
+                cls, data, api_key=api_key, current_ids=current_ids
+            )
             instance.save()
-            instance._attach_objects_post_save_hook(cls, data)
+            instance._attach_objects_post_save_hook(cls, data, api_key=api_key)
 
         for field in instance._meta.concrete_fields:
             if isinstance(field, (StripePercentField, models.UUIDField)):
@@ -993,7 +1030,7 @@ class StripeModel(StripeBaseModel):
             djstripe_settings.get_default_api_key(livemode=kwargs.get("livemode")),
         )
         data = cls.stripe_class.retrieve(id=id, **kwargs)
-        instance = cls.sync_from_stripe_data(data)
+        instance = cls.sync_from_stripe_data(data, api_key=kwargs.get("api_key"))
         return instance
 
     def __str__(self):

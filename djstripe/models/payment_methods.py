@@ -47,7 +47,9 @@ class DjstripePaymentMethod(models.Model):
         return instance
 
     @classmethod
-    def _get_or_create_source(cls, data, source_type=None):
+    def _get_or_create_source(
+        cls, data, source_type=None, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
 
         # prefer passed in source_type
         if not source_type:
@@ -55,7 +57,7 @@ class DjstripePaymentMethod(models.Model):
 
         try:
             model = cls._model_for_type(source_type)
-            model._get_or_create_from_stripe_object(data)
+            model._get_or_create_from_stripe_object(data, api_key=api_key)
         except ValueError as e:
             # This may happen if we have source types we don't know about.
             # Let's not make dj-stripe entirely unusable if that happens.
@@ -93,6 +95,7 @@ class DjstripePaymentMethod(models.Model):
         pending_relations=None,
         save=True,
         stripe_account=None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
     ):
 
         raw_field_data = data.get(field_name)
@@ -127,6 +130,7 @@ class DjstripePaymentMethod(models.Model):
             current_ids=current_ids,
             pending_relations=pending_relations,
             stripe_account=stripe_account,
+            api_key=api_key,
         )
 
         return cls.objects.get_or_create(id=id_, defaults={"type": source_type})
@@ -694,14 +698,16 @@ class Source(StripeModel):
         data["source_data"] = data[data["type"]]
         return data
 
-    def _attach_objects_hook(self, cls, data, current_ids=None):
+    def _attach_objects_hook(
+        self, cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY, current_ids=None
+    ):
         customer = None
         # "customer" key could be like "cus_6lsBvm5rJ0zyHc" or {"id": "cus_6lsBvm5rJ0zyHc"}
         customer_id = get_id_from_stripe_data(data.get("customer"))
 
         if current_ids is None or customer_id not in current_ids:
             customer = cls._stripe_object_to_customer(
-                target_cls=Customer, data=data, current_ids=current_ids
+                target_cls=Customer, data=data, current_ids=current_ids, api_key=api_key
             )
 
         if customer:
@@ -716,18 +722,23 @@ class Source(StripeModel):
 
         # First, wipe default source on all customers that use this.
         Customer.objects.filter(default_source=self.id).update(default_source=None)
-
+        api_key = self.default_api_key
         try:
             # TODO - we could use the return value of sync_from_stripe_data
             #  or call its internals - self._sync/_attach_objects_hook etc here
             #  to update `self` at this point?
-            self.sync_from_stripe_data(self.api_retrieve().detach())
+            self.sync_from_stripe_data(
+                self.api_retrieve(api_key=api_key).detach(), api_key=api_key
+            )
             return True
         except (InvalidRequestError, NotImplementedError):
             # The source was already detached. Resyncing.
             # NotImplementedError is an artifact of stripe-python<2.0
             # https://github.com/stripe/stripe-python/issues/376
-            self.sync_from_stripe_data(self.api_retrieve())
+            self.sync_from_stripe_data(
+                self.api_retrieve(api_key=self.default_api_key),
+                api_key=self.default_api_key,
+            )
             return False
 
 
@@ -869,14 +880,16 @@ class PaymentMethod(StripeModel):
             return f"{enums.PaymentMethodType.humanize(self.type)} for {self.customer}"
         return f"{enums.PaymentMethodType.humanize(self.type)} is not associated with any customer"
 
-    def _attach_objects_hook(self, cls, data, current_ids=None):
+    def _attach_objects_hook(
+        self, cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY, current_ids=None
+    ):
         customer = None
         # "customer" key could be like "cus_6lsBvm5rJ0zyHc" or {"id": "cus_6lsBvm5rJ0zyHc"}
         customer_id = get_id_from_stripe_data(data.get("customer"))
 
         if current_ids is None or customer_id not in current_ids:
             customer = cls._stripe_object_to_customer(
-                target_cls=Customer, data=data, current_ids=current_ids
+                target_cls=Customer, data=data, current_ids=current_ids, api_key=api_key
             )
 
         if customer:

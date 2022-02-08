@@ -430,12 +430,20 @@ class Charge(StripeModel):
         captured_charge = self.api_retrieve().capture(**kwargs)
         return self.__class__.sync_from_stripe_data(captured_charge)
 
-    def _attach_objects_post_save_hook(self, cls, data, pending_relations=None):
+    def _attach_objects_post_save_hook(
+        self,
+        cls,
+        data,
+        pending_relations=None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+    ):
         super()._attach_objects_post_save_hook(
-            cls, data, pending_relations=pending_relations
+            cls, data, pending_relations=pending_relations, api_key=api_key
         )
 
-        cls._stripe_object_to_refunds(target_cls=Refund, data=data, charge=self)
+        cls._stripe_object_to_refunds(
+            target_cls=Refund, data=data, charge=self, api_key=api_key
+        )
 
 
 # TODO Add Tests
@@ -1266,13 +1274,17 @@ class Customer(StripeModel):
         return Invoice.upcoming(**kwargs)
 
     def _attach_objects_post_save_hook(
-        self, cls, data, pending_relations=None
+        self,
+        cls,
+        data,
+        pending_relations=None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
     ):  # noqa (function complexity)
         from .billing import Coupon
         from .payment_methods import DjstripePaymentMethod
 
         super()._attach_objects_post_save_hook(
-            cls, data, pending_relations=pending_relations
+            cls, data, pending_relations=pending_relations, api_key=api_key
         )
 
         save = False
@@ -1285,14 +1297,14 @@ class Customer(StripeModel):
             # by id when we look at the default_source (we need the source type).
             for source in customer_sources["data"]:
                 obj, _ = DjstripePaymentMethod._get_or_create_source(
-                    source, source["object"]
+                    source, source["object"], api_key=api_key
                 )
                 sources[source["id"]] = obj
 
         discount = data.get("discount")
         if discount:
             coupon, _created = Coupon._get_or_create_from_stripe_object(
-                discount, "coupon"
+                discount, "coupon", api_key=api_key
             )
             if coupon and coupon != self.coupon:
                 self.coupon = coupon
@@ -1304,7 +1316,9 @@ class Customer(StripeModel):
         if save:
             self.save()
 
-    def _attach_objects_hook(self, cls, data, current_ids=None):
+    def _attach_objects_hook(
+        self, cls, data, current_ids=None, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         # When we save a customer to Stripe, we add a reference to its Django PK
         # in the `django_account` key. If we find that, we re-attach that PK.
         subscriber_key = djstripe_settings.SUBSCRIBER_CUSTOMER_KEY
@@ -1418,10 +1432,16 @@ class Dispute(StripeModel):
     def __str__(self):
         return f"{self.human_readable_amount} ({enums.DisputeStatus.humanize(self.status)}) "
 
-    def _attach_objects_post_save_hook(self, cls, data, pending_relations=None):
+    def _attach_objects_post_save_hook(
+        self,
+        cls,
+        data,
+        pending_relations=None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+    ):
 
         super()._attach_objects_post_save_hook(
-            cls, data, pending_relations=pending_relations
+            cls, data, pending_relations=pending_relations, api_key=api_key
         )
 
         # Retrieve and save files from the dispute.evidence object.
@@ -1440,7 +1460,10 @@ class Dispute(StripeModel):
             file_upload_id = self.evidence.get(field, None)
             if file_upload_id:
                 try:
-                    File.sync_from_stripe_data(File(id=file_upload_id).api_retrieve())
+                    File.sync_from_stripe_data(
+                        File(id=file_upload_id).api_retrieve(api_key=api_key),
+                        api_key=api_key,
+                    )
                 except stripe.error.PermissionError:
                     # No permission to retrieve the data with the key
                     # Log a warning message
@@ -1452,7 +1475,9 @@ class Dispute(StripeModel):
 
         # iterate and sync every balance transaction
         for stripe_balance_transaction in self.balance_transactions:
-            BalanceTransaction.sync_from_stripe_data(stripe_balance_transaction)
+            BalanceTransaction.sync_from_stripe_data(
+                stripe_balance_transaction, api_key=api_key
+            )
 
 
 class Event(StripeModel):
@@ -1493,7 +1518,9 @@ class Event(StripeModel):
     def __str__(self):
         return f"type={self.type}, id={self.id}"
 
-    def _attach_objects_hook(self, cls, data, current_ids=None):
+    def _attach_objects_hook(
+        self, cls, data, current_ids=None, api_key=djstripe_settings.STRIPE_SECRET_KEY
+    ):
         if self.api_version is None:
             # as of api version 2017-02-14, the account.application.deauthorized
             # event sends None as api_version.
@@ -1511,7 +1538,7 @@ class Event(StripeModel):
             self.request_id = request_obj or ""
 
     @classmethod
-    def process(cls, data, api_key: str = None):
+    def process(cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY):
         qs = cls.objects.filter(id=data["id"])
         if qs.exists():
             return qs.first()
