@@ -5,9 +5,12 @@ import json
 from typing import Dict, Optional
 from urllib.parse import urljoin
 
+import stripe
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.contrib.admin.utils import display_for_field, display_for_value
+from django.core.management import call_command
 from django.urls import reverse
 from jsonfield import JSONField
 from stripe.error import AuthenticationError, InvalidRequestError
@@ -37,6 +40,37 @@ def admin_display_for_field_override():
 
 # execute override
 admin_display_for_field_override()
+
+
+@admin.action(description="Re-Sync Selected Instances")
+def _resync_instances(modeladmin, request, queryset):
+    """Admin Action to resync selected instances"""
+    for instance in queryset:
+        api_key = instance.default_api_key
+        try:
+            if instance.djstripe_owner_account:
+                stripe_data = instance.api_retrieve(
+                    stripe_account=instance.djstripe_owner_account.id, api_key=api_key
+                )
+            else:
+                stripe_data = instance.api_retrieve()
+            instance.__class__.sync_from_stripe_data(stripe_data, api_key=api_key)
+            modeladmin.message_user(
+                request, f"Successfully Synced: {instance}", level=messages.SUCCESS
+            )
+        except stripe.error.PermissionError as error:
+            modeladmin.message_user(request, error, level=messages.WARNING)
+        except stripe.error.InvalidRequestError:
+            raise
+
+
+@admin.action(description="Re-Sync ALL Usage Record Summaries")
+def _resync_all_usage_record_summaries(modeladmin, request, queryset):
+    """Admin Action to sync all UsageRecordSummary Objects because they can't be retrieved individually"""
+    call_command("djstripe_sync_models", "UsageRecordSummary")
+    modeladmin.message_user(
+        request, "Successfully Synced ALL Instances", level=messages.SUCCESS
+    )
 
 
 class ReadOnlyMixin:
@@ -181,6 +215,7 @@ class StripeModelAdmin(admin.ModelAdmin):
     """Base class for all StripeModel-based model admins"""
 
     change_form_template = "djstripe/admin/change_form.html"
+    actions = (_resync_instances,)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -273,6 +308,7 @@ class APIKeyAdminCreateForm(forms.ModelForm):
         model = models.APIKey
         fields = ["name", "secret"]
 
+    # todo add test
     def _post_clean(self):
         super()._post_clean()
 
@@ -289,6 +325,8 @@ class APIKeyAdminCreateForm(forms.ModelForm):
 
 @admin.register(models.APIKey)
 class APIKeyAdmin(admin.ModelAdmin):
+    change_form_template = "djstripe/admin/change_form.html"
+
     list_display = ("__str__", "type", "djstripe_owner_account", "livemode")
     readonly_fields = ("djstripe_owner_account", "livemode", "type", "secret")
     search_fields = ("name",)
@@ -588,7 +626,7 @@ class SubscriptionAdmin(StripeModelAdmin):
 
     _cancel.short_description = "Cancel selected subscriptions"  # type: ignore # noqa
 
-    actions = (_cancel,)
+    actions = (_cancel, _resync_instances)
 
 
 @admin.register(models.TaxRate)
@@ -625,6 +663,20 @@ class UsageRecordAdmin(StripeModelAdmin):
 @admin.register(models.UsageRecordSummary)
 class UsageRecordSummaryAdmin(StripeModelAdmin):
     list_display = ("invoice", "subscription_item", "total_usage")
+    actions = (_resync_all_usage_record_summaries,)
+
+    def changelist_view(self, request, extra_context=None):
+        # we fool it into thinking we have selected some query
+        # since we need to sync all UsageRecordSummary instances since Stripe
+        # does not allow retrieving one by one
+        post = request.POST.copy()
+        if (
+            helpers.ACTION_CHECKBOX_NAME not in post
+            and post.get("action") == "_resync_all_usage_record_summaries"
+        ):
+            post[helpers.ACTION_CHECKBOX_NAME] = None
+            request._set_post(post)
+        return super().changelist_view(request, extra_context)
 
 
 class WebhookEndpointAdminBaseForm(forms.ModelForm):
@@ -808,11 +860,15 @@ class WebhookEndpointAdmin(admin.ModelAdmin):
         "created",
         "api_version",
     )
+    actions = (_resync_instances,)
 
-    # Disable the mass-delete action for webhook endpoints.
-    # We don't want to enable deleting multiple endpoints on Stripe at once.
     def get_actions(self, request):
-        return {}
+        actions = super().get_actions(request)
+        # Disable the mass-delete action for webhook endpoints.
+        # We don't want to enable deleting multiple endpoints on Stripe at once.
+        if "delete_selected" in actions:
+            del actions["delete_selected"]
+        return actions
 
     def get_form(self, request, obj=None, **kwargs):
         if obj:

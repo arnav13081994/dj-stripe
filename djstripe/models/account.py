@@ -14,8 +14,6 @@ class Account(StripeModel):
     Stripe documentation: https://stripe.com/docs/api/accounts
     """
 
-    djstripe_owner_account = None
-
     stripe_class = stripe.Account
     business_profile = JSONField(
         null=True, blank=True, help_text="Optional information related to the business."
@@ -86,6 +84,13 @@ class Account(StripeModel):
         help_text="Details on the acceptance of the Stripe Services Agreement",
     )
 
+    def get_stripe_dashboard_url(self) -> str:
+        """Get the stripe dashboard url for this object."""
+        return (
+            f"https://dashboard.stripe.com/{self.id}/"
+            f"{'test/' if not self.livemode else ''}dashboard"
+        )
+
     @property
     def default_api_key(self) -> str:
         return self.get_default_api_key()
@@ -115,17 +120,15 @@ class Account(StripeModel):
         return ""
 
     @classmethod
-    def get_default_account(cls):
+    def get_default_account(cls, api_key=djstripe_settings.STRIPE_SECRET_KEY):
         # As of API version 2020-03-02, there is no permission that can allow
         # restricted keys to call GET /v1/account
         if djstripe_settings.STRIPE_SECRET_KEY.startswith("rk_"):
             return None
 
-        account_data = cls.stripe_class.retrieve(
-            api_key=djstripe_settings.STRIPE_SECRET_KEY
-        )
+        account_data = cls.stripe_class.retrieve(api_key=api_key)
 
-        return cls._get_or_create_from_stripe_object(account_data)[0]
+        return cls._get_or_create_from_stripe_object(account_data, api_key=api_key)[0]
 
     @classmethod
     def get_or_retrieve_for_api_key(cls, api_key: str):
@@ -169,11 +172,6 @@ class Account(StripeModel):
             stripe_account=data["id"] if not stripe_account else stripe_account,
             api_key=api_key,
         )
-
-    @classmethod
-    def _find_owner_account(cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY):
-        # Account model never has an owner account (it's always itself)
-        return None
 
     # "Special" handling of the icon and logo fields
     # Previously available as properties, they moved to
