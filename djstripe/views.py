@@ -3,9 +3,15 @@ dj-stripe - Views related to the djstripe app.
 """
 import logging
 
-from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404
+from django.apps import apps
+from django.contrib.admin.utils import quote
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.encoding import iri_to_uri
+from django.utils.html import format_html
+from django.utils.text import capfirst
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import View
 
@@ -57,3 +63,69 @@ class ProcessWebhookView(View):
             return HttpResponseBadRequest()
 
         return HttpResponse(str(trigger.id))
+
+
+class ConfirmCustomAction(View):
+    template_name = "djstripe/admin/confirm_action.html"
+    app_label = "djstripe"
+    app_config = apps.get_app_config(app_label)
+
+    def dispatch(self, request, *args, **kwargs):
+        if not (request.user.is_authenticated and request.user.is_staff):
+            return HttpResponseRedirect(
+                reverse("admin:login") + f"?next={iri_to_uri(request.path_info)}"
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        context = self.get_context_data(**kwargs)
+        return render(request, self.template_name, context)
+
+    def post(self, request, *args, **kwargs):
+        model_name = self.kwargs.get("model_name")
+        model = self.app_config.get_model(model_name)
+        qs = self.get_queryset()
+
+        # process the request
+        handler = getattr(self, self.kwargs.get("action_name"))
+        handler(request, qs)
+
+        return HttpResponseRedirect(
+            reverse(
+                f"admin:{model._meta.app_label}_{model._meta.model_name}_changelist"
+            )
+        )
+
+    def get_queryset(self):
+        model_name = self.kwargs.get("model_name")
+        model_pks = self.kwargs.get("model_pks").split(",")
+        model = self.app_config.get_model(model_name)
+        if model_pks == ["all"]:
+            return model.objects.all()
+        return model.objects.filter(pk__in=model_pks)
+
+    def get_context_data(self, **kwargs):
+        context = {}
+
+        # add action_name
+        context["action_name"] = self.kwargs.get("action_name")
+
+        qs = self.get_queryset()
+
+        context["info"] = []
+        for obj in qs:
+            admin_url = reverse(
+                f"admin:{obj._meta.app_label}_{obj._meta.model_name}_change",
+                None,
+                (quote(obj.pk),),
+            )
+            context["info"].append(
+                format_html(
+                    '{}: <a href="{}">{}</a>',
+                    capfirst(obj._meta.verbose_name),
+                    admin_url,
+                    obj,
+                )
+            )
+
+        return context
