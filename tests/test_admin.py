@@ -1,9 +1,11 @@
 """
 dj-stripe Admin Tests.
 """
+from copy import deepcopy
 from typing import Sequence
 
 import pytest
+import stripe
 from django.apps import apps
 from django.contrib.admin import helpers, site
 from django.contrib.auth import get_user_model
@@ -16,6 +18,17 @@ from jsonfield import JSONField
 from djstripe import admin as djstripe_admin
 from djstripe import models
 from djstripe.models.account import Account
+from tests import (
+    FAKE_BALANCE_TRANSACTION,
+    FAKE_CARD_AS_PAYMENT_METHOD,
+    FAKE_CHARGE,
+    FAKE_CUSTOMER,
+    FAKE_INVOICE,
+    FAKE_PAYMENT_INTENT_I,
+    FAKE_PLAN,
+    FAKE_PRODUCT,
+    FAKE_SUBSCRIPTION,
+)
 
 from .fields.models import TestCustomActionModel
 
@@ -1020,3 +1033,78 @@ class TestCustomActionMixin:
                         "model_pks": "all",
                     },
                 )
+
+
+class TestSubscriptionAdminCustomAction:
+    def test__cancel_subscription_instances(
+        self,
+        admin_client,
+        monkeypatch,
+    ):
+        def mock_invoice_get(*args, **kwargs):
+            return FAKE_INVOICE
+
+        def mock_customer_get(*args, **kwargs):
+            return FAKE_CUSTOMER
+
+        def mock_charge_get(*args, **kwargs):
+            return FAKE_CHARGE
+
+        def mock_payment_method_get(*args, **kwargs):
+            return FAKE_CARD_AS_PAYMENT_METHOD
+
+        def mock_payment_intent_get(*args, **kwargs):
+            return FAKE_PAYMENT_INTENT_I
+
+        def mock_subscription_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION
+
+        def mock_balance_transaction_get(*args, **kwargs):
+            return FAKE_BALANCE_TRANSACTION
+
+        def mock_product_get(*args, **kwargs):
+            return FAKE_PRODUCT
+
+        def mock_plan_get(*args, **kwargs):
+            return FAKE_PLAN
+
+        # monkeypatch stripe retrieve calls to return
+        # the desired json response.
+        monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
+        monkeypatch.setattr(
+            stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
+        )
+        monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
+        monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
+        monkeypatch.setattr(stripe.PaymentIntent, "retrieve", mock_payment_intent_get)
+        monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
+        monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)
+
+        # Create Latest Invoice
+        models.Invoice.sync_from_stripe_data(FAKE_INVOICE)
+
+        model = models.Subscription
+        subscription_fake = deepcopy(FAKE_SUBSCRIPTION)
+        instance = model.sync_from_stripe_data(subscription_fake)
+
+        # get the standard changelist_view url
+        change_url = reverse(
+            f"admin:{model._meta.app_label}_{model.__name__.lower()}_changelist"
+        )
+
+        data = {"action": "_cancel", helpers.ACTION_CHECKBOX_NAME: [instance.pk]}
+
+        response = admin_client.post(change_url, data)
+
+        # assert user redirected to the correct url
+        assert response.status_code == 302
+        assert response.url == reverse(
+            "djstripe:djstripe_custom_action",
+            kwargs={
+                "action_name": "_cancel",
+                "model_name": model.__name__.lower(),
+                "model_pks": instance.pk,
+            },
+        )
