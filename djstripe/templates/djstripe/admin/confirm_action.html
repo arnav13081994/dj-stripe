@@ -5,6 +5,9 @@
 {% block extrahead %}
     {{ block.super }}
     {{ media.js }}
+    {% comment %} Load Jquery shipped with Django {% endcomment %}
+    <script src="{% static 'admin/js/vendor/jquery/jquery.min.js' %}" ></script>
+    <script src="{% static 'admin/js/jquery.init.js' %}" ></script>
 
     <script src="{% static 'admin/js/cancel.js' %}" async></script>
 {% endblock %}
@@ -24,6 +27,15 @@
 
 {% block content %}
 
+    {% comment %} Page Loader Icon {% endcomment %}
+    <div id="div_spinner" style="display: none;">
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+            <div id="spinner" role="status">
+                <span>Loading...</span>
+            </div>
+        </div>
+    </div>
+
     <h1>Are you Sure? </h1>
 
     {% if action_name == "_resync_instances" %}
@@ -41,11 +53,11 @@
         {% endfor %}
     </ul>
 
-    <form method="post">
+    <form method="post" onsubmit="django.jQuery('#div_spinner').show();">
         {% csrf_token %}
         <div>
             <input type="submit" value="{% translate 'Yes, I’m sure' %}">
-            <a href="#" class="button cancel-link">{% translate "No, take me back" %}</a>
+            <a href="#" class="button cancel-link" onclick="django.jQuery('#div_spinner').show()">{% translate "No, take me back" %}</a>
         </div>
     </form>
 
