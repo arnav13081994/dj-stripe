@@ -10,7 +10,6 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.utils import display_for_field, display_for_value
 from django.contrib.contenttypes.models import ContentType
-from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -71,9 +70,18 @@ class CustomActionMixin:
     @admin.action(description="Sync All Instances for all API Keys")
     def _sync_all_instances(self, request, queryset):
         """Admin Action to Sync All Instances"""
-        call_command("djstripe_sync_models", self.model.__name__)
-        self.message_user(
-            request, "Successfully Synced All Instances", level=messages.SUCCESS
+        ct = ContentType.objects.get_for_model(queryset.model)
+        pks = "all"
+
+        return HttpResponseRedirect(
+            reverse(
+                "djstripe:djstripe_custom_action",
+                kwargs={
+                    "action_name": "_sync_all_instances",
+                    "model_name": ct.model,
+                    "model_pks": pks,
+                },
+            )
         )
 
     def changelist_view(self, request, extra_context=None):

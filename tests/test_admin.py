@@ -5,7 +5,6 @@ from typing import Sequence
 
 import pytest
 from django.apps import apps
-from django.contrib import messages
 from django.contrib.admin import helpers, site
 from django.contrib.auth import get_user_model
 from django.core.exceptions import FieldError
@@ -58,59 +57,6 @@ pytestmark = pytest.mark.django_db
 )
 def test_get_forward_relation_fields_for_model(output, input):
     assert output == djstripe_admin.get_forward_relation_fields_for_model(input)
-
-
-class TestAdminCustomActions:
-    # the 4 models that do not inherit from StripeModel and hence
-    # do not inherit from StripeModelAdmin
-    ignore_models = [
-        "WebhookEventTrigger",
-        "WebhookEndpoint",
-        "IdempotencyKey",
-        "APIKey",
-    ]
-    kwargs_called_with = {}
-
-    # to get around Session/MessageMiddleware Deprecation Warnings
-    def dummy_get_response(self, request):
-        return None
-
-    @pytest.mark.parametrize("fake_selected_pks", [None, [1, 2]])
-    def test__sync_all_instances(self, admin_client, fake_selected_pks):
-        app_label = "djstripe"
-        app_config = apps.get_app_config(app_label)
-        all_models_lst = app_config.get_models()
-
-        for model in all_models_lst:
-            if model in site._registry.keys() and (
-                model.__name__ == "WebhookEndpoint"
-                or model.__name__ not in self.ignore_models
-            ):
-
-                # get the standard changelist_view url
-                change_url = reverse(
-                    f"admin:{model._meta.app_label}_{model.__name__.lower()}_changelist"
-                )
-
-                data = {"action": "_sync_all_instances"}
-
-                if fake_selected_pks is not None:
-                    data[helpers.ACTION_CHECKBOX_NAME] = fake_selected_pks
-
-                response = admin_client.post(change_url, data, follow=True)
-                assert response.status_code == 200
-
-                # assert correct Success messages are emmitted
-                messages_sent_dictionary = {
-                    m.message: m.level_tag
-                    for m in messages.get_messages(response.wsgi_request)
-                }
-
-                # assert correct success message was emmitted
-                assert (
-                    messages_sent_dictionary.get("Successfully Synced All Instances")
-                    == "success"
-                )
 
 
 class TestAdminRegisteredModelsChildrenOfStripeModel(TestCase):
@@ -976,7 +922,7 @@ class TestCustomActionMixin:
     ]
 
     @pytest.mark.parametrize("fake_selected_pks", [None, [1, 2]])
-    def test_changelist_view(self, admin_client, admin_user, fake_selected_pks):
+    def test_changelist_view(self, admin_client, fake_selected_pks):
 
         app_label = "djstripe"
         app_config = apps.get_app_config(app_label)
@@ -1039,3 +985,38 @@ class TestCustomActionMixin:
                 "model_pks": instance.pk,
             },
         )
+
+    @pytest.mark.parametrize("fake_selected_pks", [None, [1, 2]])
+    def test__sync_all_instances(self, admin_client, fake_selected_pks):
+        app_label = "djstripe"
+        app_config = apps.get_app_config(app_label)
+        all_models_lst = app_config.get_models()
+
+        for model in all_models_lst:
+            if model in site._registry.keys() and (
+                model.__name__ == "WebhookEndpoint"
+                or model.__name__ not in self.ignore_models
+            ):
+
+                # get the standard changelist_view url
+                change_url = reverse(
+                    f"admin:{model._meta.app_label}_{model.__name__.lower()}_changelist"
+                )
+
+                data = {"action": "_sync_all_instances"}
+
+                if fake_selected_pks is not None:
+                    data[helpers.ACTION_CHECKBOX_NAME] = fake_selected_pks
+
+                response = admin_client.post(change_url, data)
+
+                # assert user redirected to the correct url
+                assert response.status_code == 302
+                assert response.url == reverse(
+                    "djstripe:djstripe_custom_action",
+                    kwargs={
+                        "action_name": "_sync_all_instances",
+                        "model_name": model.__name__.lower(),
+                        "model_pks": "all",
+                    },
+                )

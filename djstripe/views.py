@@ -7,6 +7,7 @@ import stripe
 from django.apps import apps
 from django.contrib import messages
 from django.contrib.admin.utils import quote
+from django.core.management import call_command
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -149,3 +150,8 @@ class ConfirmCustomAction(View):
                 messages.warning(request, error)
             except stripe.error.InvalidRequestError:
                 raise
+
+    def _sync_all_instances(self, request, queryset):
+        """Admin Action to Sync All Instances"""
+        call_command("djstripe_sync_models", queryset.model.__name__)
+        messages.success(request, "Successfully Synced All Instances")
