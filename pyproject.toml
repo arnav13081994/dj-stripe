@@ -44,7 +44,7 @@ mkdocstrings = {version = "^0.16.0", optional = true}
 mkdocs-material = {version = "^8.2.15", optional = true}
 mkdocs-autorefs = {version = "^0.3.0", optional = true}
 mike = {version = "^1.1.2", optional = true}
-jinja2 = "<3.1.0"
+jinja2 = {version = "<3.1.0", optional = true}
 
 [tool.poetry.dev-dependencies]
 black = "^22.3.0"
@@ -58,7 +58,7 @@ pytest-django = "^4.5.2"
 mypy = "^0.950"
 
 [tool.poetry.extras]
-docs = ["mkdocs", "mkdocstrings", "mkdocstrings-python-legacy", "mkdocs-material", "mkdocs-autorefs", "psycopg2", "mike"]
+docs = ["mkdocs", "mkdocstrings", "mkdocs-material", "mkdocs-autorefs", "psycopg2", "mike", "jinja2"]
 
 [tool.isort]
 profile = "black"
