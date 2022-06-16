@@ -1086,6 +1086,7 @@ FAKE_SUBSCRIPTION_METERED = SubscriptionDict(
                 }
             ]
         },
+        "pause_collection": None,
         "plan": deepcopy(FAKE_PLAN_METERED),
         "quantity": 1,
         "start": 1439229181,
@@ -1650,6 +1651,8 @@ FAKE_EVENT_TAX_ID_UPDATED = {
 
 FAKE_EVENT_TAX_ID_DELETED = deepcopy(FAKE_EVENT_TAX_ID_UPDATED)
 FAKE_EVENT_TAX_ID_DELETED["type"] = "customer.tax_id.deleted"
+
+FAKE_TAX_CODE = load_fixture("tax_code_txcd_fakefakefakefakefake0001.json")
 
 FAKE_INVOICEITEM = {
     "id": "ii_16XVTY2eZvKYlo2Cxz5n3RaS",

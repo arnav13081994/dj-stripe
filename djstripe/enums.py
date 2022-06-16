@@ -395,6 +395,7 @@ class InvoiceBillingReason(Enum):
     manual = _("Manual")
     upcoming = _("Upcoming")
     subscription_threshold = _("Subscription threshold")
+    automatic_pending_invoice_item_invoice = _("Automatic pending invoice item invoice")
 
 
 class InvoiceCollectionMethod(Enum):
@@ -751,6 +752,12 @@ class SubscriptionStatus(Enum):
     past_due = _("Past due")
     canceled = _("Canceled")
     unpaid = _("Unpaid")
+
+
+class SubscriptionProrationBehavior(Enum):
+    create_prorations = _("Create prorations")
+    always_invoice = _("Always invoice")
+    none = _("None")
 
 
 class TaxIdType(Enum):

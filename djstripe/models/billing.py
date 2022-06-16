@@ -1435,6 +1435,11 @@ class Subscription(StripeModel):
         "invoice items will be billed according to the schedule provided at "
         "pending_invoice_item_interval.",
     )
+    pause_collection = JSONField(
+        null=True,
+        blank=True,
+        help_text="If specified, payment collection for this subscription will be paused.",
+    )
     pending_invoice_item_interval = JSONField(
         null=True,
         blank=True,
@@ -1467,6 +1472,17 @@ class Subscription(StripeModel):
         related_name="subscriptions",
         help_text="The plan associated with this subscription. This value will be "
         "`null` for multi-plan subscriptions",
+    )
+    proration_behavior = StripeEnumField(
+        enum=enums.SubscriptionProrationBehavior,
+        help_text="Determines how to handle prorations when the billing cycle changes (e.g., when switching plans, resetting billing_cycle_anchor=now, or starting a trial), or if an item’s quantity changes",
+        default=enums.SubscriptionProrationBehavior.create_prorations,
+        blank=True,
+    )
+    proration_date = StripeDateTimeField(
+        null=True,
+        blank=True,
+        help_text="If set, the proration will be calculated as though the subscription was updated at the given time. This can be used to apply exactly the same proration that was previewed with upcoming invoice endpoint. It can also be used to implement custom proration logic, such as prorating by day instead of by second, by providing the time that you wish to use for proration calculations",
     )
     quantity = models.IntegerField(
         null=True,
@@ -1510,7 +1526,7 @@ class Subscription(StripeModel):
         products_lst = [
             subscription.plan.product.name
             for subscription in subscriptions_lst
-            if subscription and subscription.plan
+            if subscription and subscription.plan and subscription.plan.product
         ]
 
         return f"{self.customer} on {' and '.join(products_lst)}"
@@ -1551,8 +1567,18 @@ class Subscription(StripeModel):
                     "The `prorate` parameter to Subscription.update() is deprecated "
                     "by Stripe. Use `proration_behavior` instead.\n"
                     "Read more: "
-                    "https://stripe.com/docs/billing/subscriptions/prorations"
+                    "https://stripe.com/docs/billing/subscriptions/prorations",
+                    DeprecationWarning,
                 )
+            elif kwargs.get("subscription_prorate") is not None:
+                warnings.warn(
+                    "The `subscription_prorate` parameter to Subscription.update() is deprecated "
+                    "by Stripe. Use `proration_behavior` instead.\n"
+                    "Read more: "
+                    "https://stripe.com/docs/billing/subscriptions/prorations",
+                    DeprecationWarning,
+                )
+
             else:
                 prorate = djstripe_settings.PRORATION_POLICY
                 if prorate is not None:
@@ -1778,6 +1804,17 @@ class SubscriptionItem(StripeModel):
         related_name="subscription_items",
         help_text="The price the customer is subscribed to.",
     )
+    proration_behavior = StripeEnumField(
+        enum=enums.SubscriptionProrationBehavior,
+        help_text="Determines how to handle prorations when the billing cycle changes (e.g., when switching plans, resetting billing_cycle_anchor=now, or starting a trial), or if an item’s quantity changes",
+        default=enums.SubscriptionProrationBehavior.create_prorations,
+        blank=True,
+    )
+    proration_date = StripeDateTimeField(
+        null=True,
+        blank=True,
+        help_text="If set, the proration will be calculated as though the subscription was updated at the given time. This can be used to apply exactly the same proration that was previewed with upcoming invoice endpoint. It can also be used to implement custom proration logic, such as prorating by day instead of by second, by providing the time that you wish to use for proration calculations",
+    )
     quantity = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -1965,6 +2002,29 @@ class SubscriptionSchedule(StripeModel):
             api_key=api_key, stripe_account=stripe_account, **kwargs
         )
         return SubscriptionSchedule.sync_from_stripe_data(stripe_subscription_schedule)
+
+
+class TaxCode(StripeModel):
+    """
+    Tax codes classify goods and services for tax purposes.
+
+    Stripe documentation: https://stripe.com/docs/api/tax_codes
+    """
+
+    stripe_class = stripe.TaxCode
+    metadata = None
+
+    name = models.CharField(
+        max_length=128,
+        help_text="A short name for the tax code.",
+    )
+
+    class Meta:
+        verbose_name = "Tax Code"
+
+    def __str__(self):
+        return f"{self.name}: {self.id}"
+
 
 class TaxId(StripeModel):
     """

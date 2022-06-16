@@ -2,11 +2,26 @@
 all Stripe objects to the local db.
 
 Invoke like so:
-    1) To sync all Objects:
+    1) To sync all Objects for all API keys:
         python manage.py djstripe_sync_models
 
-    2) To only sync Stripe Accounts:
+    2) To sync all Objects only for sk_test_XXX API key:
+        python manage.py djstripe_sync_models --api-keys sk_test_XXX
+
+    3) To sync all Objects only for sk_test_XXX and sk_test_YYY API keys:
+        python manage.py djstripe_sync_models --api-keys sk_test_XXX sk_test_XXX
+
+    4) To only sync Stripe Accounts for all API keys:
         python manage.py djstripe_sync_models Account
+
+    5) To only sync Stripe Accounts for sk_test_XXX API key:
+        python manage.py djstripe_sync_models Account --api-keys sk_test_XXX
+
+    6) To only sync Stripe Accounts for sk_test_XXX and sk_test_YYY API keys:
+        python manage.py djstripe_sync_models Account --api-keys sk_test_XXX sk_test_YYY
+
+    7) To only sync Stripe Accounts and Charges for sk_test_XXX and sk_test_YYY API keys:
+        python manage.py djstripe_sync_models Account Charge --api-keys sk_test_XXX sk_test_YYY
 """
 from typing import List
 
@@ -33,8 +48,18 @@ class Command(BaseCommand):
             help="restricts sync to these model names (default is to sync all "
             "supported models)",
         )
+        # Named (optional) arguments
+        parser.add_argument(
+            "--api-keys",
+            metavar="ApiKeys",
+            nargs="*",
+            type=str,
+            # todo uncomment this once support for python 3.7 is dropped.
+            # action="extend",
+            help="Specify the api_keys you would like to perform this sync for.",
+        )
 
-    def handle(self, *args, **options):
+    def handle(self, *args, api_keys, **options):  # noqa: C901
         app_label = "djstripe"
         app_config = apps.get_app_config(app_label)
         model_list = []  # type: List[models.StripeModel]
@@ -52,8 +77,25 @@ class Command(BaseCommand):
         else:
             model_list = app_config.get_models()
 
-        # get all APIKey objects in the db
-        api_qs = models.APIKey.objects.all()
+        if api_keys is not None:
+            for api_key in api_keys:
+                try:
+                    # check to ensure the given key is in the DB
+                    models.APIKey.objects.get(secret=api_key)
+                except models.APIKey.DoesNotExist:
+                    raise CommandError(f"APIKey: {api_key} is not in the database.")
+
+            api_qs = models.APIKey.objects.filter(secret__in=api_keys)
+        else:
+            # get all APIKey objects in the db
+            api_qs = models.APIKey.objects.all()
+
+            if not api_qs.exists():
+                self.stderr.write(
+                    "You don't have any API Keys in the database. Did you forget to add them?"
+                )
+                return
+
         for model in model_list:
             for api_key in api_qs:
                 self.sync_model(model, api_key=api_key)
@@ -68,6 +110,7 @@ class Command(BaseCommand):
         if not hasattr(model.stripe_class, "list"):
             if model in (
                 models.ApplicationFeeRefund,
+                models.Source,
                 models.TransferReversal,
                 models.TaxId,
                 models.UsageRecordSummary,
@@ -219,6 +262,22 @@ class Command(BaseCommand):
         return all_list_kwargs
 
     @staticmethod
+    def get_list_kwargs_src(default_list_kwargs):
+        """Returns sequence of kwargs to sync Sources for
+        all Stripe Accounts"""
+
+        all_list_kwargs = []
+        for def_kwarg in default_list_kwargs:
+            stripe_account = def_kwarg.get("stripe_account")
+            api_key = def_kwarg.get("api_key")
+            for stripe_customer in models.Customer.api_list(
+                stripe_account=stripe_account, api_key=api_key
+            ):
+                all_list_kwargs.append({"id": stripe_customer.id, **def_kwarg})
+
+        return all_list_kwargs
+
+    @staticmethod
     def get_list_kwargs_si(default_list_kwargs):
         """Returns sequence of kwrags to sync Subscription Items for
         all Stripe Accounts"""
@@ -322,6 +381,7 @@ class Command(BaseCommand):
 
         list_kwarg_handlers_dict = {
             "PaymentMethod": self.get_list_kwargs_pm,
+            "Source": self.get_list_kwargs_src,
             "SubscriptionItem": self.get_list_kwargs_si,
             "CountrySpec": self.get_list_kwargs_country_spec,
             "TransferReversal": self.get_list_kwargs_trr,
