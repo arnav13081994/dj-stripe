@@ -445,6 +445,14 @@ class MandateType(Enum):
     single_use = _("Single-use")
 
 
+class OrderStatus(Enum):
+    open = _("Open")
+    submitted = _("Submitted")
+    processing = _("Processing")
+    complete = _("Complete")
+    canceled = _("Canceled")
+
+
 # TODO - maybe refactor Enum so that inheritance works,
 #  then PaymentIntentStatus/SetupIntentStatus can inherit from IntentStatus
 class PaymentIntentStatus(Enum):
@@ -758,6 +766,16 @@ class SubscriptionProrationBehavior(Enum):
     create_prorations = _("Create prorations")
     always_invoice = _("Always invoice")
     none = _("None")
+
+
+class ShippingRateType(Enum):
+    fixed_amount = _("Fixed Amount")
+
+
+class ShippingRateTaxBehavior(Enum):
+    inclusive = _("Inclusive")
+    exclusive = _("Exclusive")
+    unspecified = _("Unspecified")
 
 
 class TaxIdType(Enum):

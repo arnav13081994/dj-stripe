@@ -6,6 +6,7 @@ from .billing import (
     Invoice,
     InvoiceItem,
     Plan,
+    ShippingRate,
     Subscription,
     SubscriptionItem,
     SubscriptionSchedule,
@@ -41,6 +42,7 @@ from .core import (
     Refund,
     SetupIntent,
 )
+from .orders import Order
 from .payment_methods import (
     BankAccount,
     Card,
@@ -73,6 +75,7 @@ __all__ = [
     "Invoice",
     "InvoiceItem",
     "Mandate",
+    "Order",
     "PaymentIntent",
     "PaymentMethod",
     "Payout",
@@ -80,6 +83,7 @@ __all__ = [
     "Price",
     "Product",
     "Refund",
+    "ShippingRate",
     "ScheduledQueryRun",
     "SetupIntent",
     "Session",

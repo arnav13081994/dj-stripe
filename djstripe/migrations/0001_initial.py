@@ -390,7 +390,7 @@ class Migration(migrations.Migration):
                 (
                     "duration",
                     djstripe.fields.StripeEnumField(
-                        enum=djstripe.enums.CouponDuration, max_length=9
+                        default="once", enum=djstripe.enums.CouponDuration, max_length=9
                     ),
                 ),
                 (
@@ -2871,7 +2871,12 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            options={"abstract": False, "get_latest_by": "created"},
+            options={
+                "abstract": False,
+                "get_latest_by": "created",
+                "verbose_name": "Tax Rates",
+                "verbose_name_plural": "Tax Rates",
+            },
         ),
         migrations.AddField(
             model_name="invoice",

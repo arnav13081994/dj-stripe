@@ -289,6 +289,20 @@ class FileLinkAdmin(StripeModelAdmin):
         return super().get_queryset(request).select_related("file")
 
 
+@admin.register(models.Order)
+class OrderAdmin(StripeModelAdmin):
+    list_display = (
+        "amount_total",
+        "customer",
+        "status",
+    )
+    list_filter = (
+        "customer",
+        "status",
+    )
+    list_select_related = ("customer", "payment_intent")
+
+
 @admin.register(models.PaymentIntent)
 class PaymentIntentAdmin(StripeModelAdmin):
     list_display = (
@@ -385,6 +399,7 @@ class InvoiceAdmin(StripeModelAdmin):
         "due_date",
     )
     list_filter = (
+        "status",
         "paid",
         "attempted",
         "created",
@@ -553,6 +568,13 @@ class BankAccountAdmin(StripeModelAdmin):
                 "account",
             )
         )
+
+
+@admin.register(models.ShippingRate)
+class ShippingRateAdmin(StripeModelAdmin):
+    list_display = ("display_name", "active", "tax_behavior", "tax_code")
+    list_filter = ("active", "tax_behavior")
+    list_select_related = ("tax_code",)
 
 
 @admin.register(models.Subscription)
