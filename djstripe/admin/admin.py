@@ -13,6 +13,7 @@ from djstripe import models
 from .actions import CustomActionMixin
 from .admin_inline import (
     InvoiceItemInline,
+    LineItemInline,
     SubscriptionInline,
     SubscriptionItemInline,
     SubscriptionScheduleInline,
@@ -238,7 +239,6 @@ class CustomerAdmin(StripeModelAdmin):
         "currency",
         "default_source",
         "default_payment_method",
-        "coupon",
         "balance",
     )
 
@@ -258,6 +258,30 @@ class CustomerAdmin(StripeModelAdmin):
                 "subscriber", "default_source", "default_payment_method", "coupon"
             )
         )
+
+
+@admin.register(models.Discount)
+class DiscountAdmin(ReadOnlyMixin, StripeModelAdmin):
+    list_display = (
+        "customer",
+        "coupon",
+        "invoice_item",
+        "promotion_code",
+        "subscription",
+    )
+    list_filter = ("customer", "start", "end", "promotion_code", "coupon")
+
+    def get_actions(self, request):
+        """
+        Returns _resync_instances only for
+        models with a defined model.stripe_class.retrieve
+        """
+        actions = super().get_actions(request)
+
+        # remove "_sync_all_instances" as Discounts cannot be listed
+        actions.pop("_sync_all_instances", None)
+
+        return actions
 
 
 @admin.register(models.Dispute)
@@ -434,6 +458,18 @@ class MandateAdmin(StripeModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("payment_method")
 
+    def get_actions(self, request):
+        """
+        Returns _resync_instances only for
+        models with a defined model.stripe_class.retrieve
+        """
+        actions = super().get_actions(request)
+
+        # remove "_sync_all_instances" as Mandates cannot be listed
+        actions.pop("_sync_all_instances", None)
+
+        return actions
+
 
 @admin.register(models.Plan)
 class PlanAdmin(StripeModelAdmin):
@@ -582,7 +618,7 @@ class SubscriptionAdmin(StripeModelAdmin):
     list_display = ("customer", "status", "get_default_tax_rates")
     list_filter = ("status", "cancel_at_period_end")
 
-    inlines = (SubscriptionItemInline, SubscriptionScheduleInline)
+    inlines = (SubscriptionItemInline, SubscriptionScheduleInline, LineItemInline)
 
     def get_actions(self, request):
         # get all actions
@@ -690,6 +726,18 @@ class UsageRecordAdmin(StripeModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("subscription_item")
+
+    def get_actions(self, request):
+        """
+        Returns _resync_instances only for
+        models with a defined model.stripe_class.retrieve
+        """
+        actions = super().get_actions(request)
+
+        # remove "_sync_all_instances" as UsageRecords cannot be listed
+        actions.pop("_sync_all_instances", None)
+
+        return actions
 
 
 @admin.register(models.UsageRecordSummary)

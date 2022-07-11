@@ -1376,7 +1376,7 @@ FAKE_CUSTOMER_IV = CustomerDict(
 FAKE_DISCOUNT_CUSTOMER = {
     "object": "discount",
     "coupon": deepcopy(FAKE_COUPON),
-    "customer": FAKE_CUSTOMER["id"],
+    "customer": FAKE_CUSTOMER,
     "start": 1493206114,
     "end": None,
     "subscription": None,
@@ -1415,6 +1415,7 @@ FAKE_INVOICE_II = InvoiceDict(
         "created": 1439785128,
         "description": None,
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": 0,
         "lines": {
@@ -1434,6 +1435,7 @@ FAKE_INVOICE_II = InvoiceDict(
                     "quantity": 1,
                     "subscription": None,
                     "type": "subscription",
+                    "discounts": [],
                 }
             ],
             "total_count": 1,
@@ -1478,6 +1480,7 @@ FAKE_INVOICE_III = InvoiceDict(
         "customer": "cus_6lsBvm5rJ0zyHc",
         "description": None,
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": 20,
         "lines": {
@@ -1497,6 +1500,7 @@ FAKE_INVOICE_III = InvoiceDict(
                     "quantity": 1,
                     "subscription": None,
                     "type": "subscription",
+                    "discounts": [],
                 }
             ],
             "total_count": 1,
@@ -1560,6 +1564,7 @@ FAKE_INVOICE_METERED_SUBSCRIPTION = InvoiceDict(
         "object": "invoice",
         "charge": None,
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": 0,
         "lines": {
@@ -1580,6 +1585,7 @@ FAKE_INVOICE_METERED_SUBSCRIPTION = InvoiceDict(
                     "subscription": FAKE_INVOICE_METERED_SUBSCRIPTION_USAGE["id"],
                     "subscription_item": FAKE_SUBSCRIPTION_ITEM["id"],
                     "type": "subscription",
+                    "discounts": [],
                 }
             ],
             "total_count": 1,
@@ -1636,6 +1642,7 @@ FAKE_UPCOMING_INVOICE = InvoiceDict(
             }
         ],
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": None,
         "lines": {
@@ -1663,6 +1670,7 @@ FAKE_UPCOMING_INVOICE = InvoiceDict(
                     ],
                     "tax_rates": [],
                     "type": "subscription",
+                    "discounts": [],
                 }
             ],
             "total_count": 1,
@@ -2126,13 +2134,14 @@ FAKE_EVENT_CUSTOMER_DISCOUNT_CREATED = {
 
 FAKE_EVENT_CUSTOMER_DISCOUNT_DELETED = {
     "id": "AGBWvF5zBm4sMCsLLPZrw9XX",
-    "type": "customer.discount.deleted",
+    "object": "event",
     "api_version": "2017-02-14",
     "created": 1439229084,
-    "object": "event",
+    "data": {"object": deepcopy(FAKE_DISCOUNT_CUSTOMER)},
+    "livemode": False,
     "pending_webhooks": 0,
     "request": "req_6l38DHch3whaDj",
-    "data": {"object": deepcopy(FAKE_DISCOUNT_CUSTOMER)},
+    "type": "customer.discount.deleted",
 }
 
 FAKE_EVENT_CUSTOMER_SOURCE_CREATED = {

@@ -1,0 +1,59 @@
+{
+    "djstripe_id": 3,
+    "id": "il_1GyU3dCOCguPTL2Bow2th8zP",
+    "djstripe_owner_account": 1,
+    "livemode": false,
+    "created": null,
+    "metadata": {},
+    "description": "LINE ITEM 1",
+    "amount": 27560,
+    "amount_excluding_tax": 27560,
+    "currency": "usd",
+    "discount_amounts": [{
+        "amount": 7028,
+        "discount": "di_1LKNRmJSZQVUcJYgvjX4UX1t"
+    }],
+    "discountable": true,
+    "discounts": [
+        "di_1LKNRmJSZQVUcJYgvjX4UX1t"
+    ],
+    "invoice_item": 397,
+    "period": {
+        "end": 1666876260,
+        "start": 1666876260
+    },
+    "period_end": 123456789,
+    "period_start": 12111,
+    "price": {
+        "id": "price_1LKNRmJSZQVUcJYgRkQDOYBL",
+        "type": "one_time",
+        "active": false,
+        "object": "price",
+        "created": 1657549130,
+        "product": "prod_M2SMqVbyQ81ihY",
+        "currency": "usd",
+        "livemode": false,
+        "metadata": {},
+        "nickname": null,
+        "recurring": null,
+        "lookup_key": null,
+        "tiers_mode": null,
+        "unit_amount": 5512,
+        "tax_behavior": "exclusive",
+        "billing_scheme": "per_unit",
+        "custom_unit_amount": null,
+        "transform_quantity": null,
+        "unit_amount_decimal": "5512"
+    },
+    "proration": false,
+    "proration_details": {
+        "credited_items": null
+    },
+    "subscription": null,
+    "subscription_item": null,
+    "tax_amounts": [],
+    "tax_rates": [],
+    "type": "invoiceitem",
+    "unit_amount_excluding_tax": "5512.00",
+    "quantity": 5
+}

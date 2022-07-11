@@ -26,6 +26,7 @@ from tests import (
     FAKE_PLAN,
     FAKE_PRODUCT,
     FAKE_SUBSCRIPTION,
+    FAKE_SUBSCRIPTION_ITEM,
     FAKE_SUBSCRIPTION_SCHEDULE,
 )
 
@@ -468,6 +469,9 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        # def mock_line_item_get(*args, **kwargs):
+        #     return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -479,6 +483,9 @@ class TestConfirmCustomActionView:
 
         def mock_payment_intent_get(*args, **kwargs):
             return FAKE_PAYMENT_INTENT_I
+
+        # def mock_subscriptionitem_get(*args, **kwargs):
+        #     return FAKE_SUBSCRIPTION_ITEM
 
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
@@ -495,11 +502,15 @@ class TestConfirmCustomActionView:
         # monkeypatch stripe retrieve calls to return
         # the desired json response.
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
         monkeypatch.setattr(
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        # monkeypatch.setattr(stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get)
+        # si_HXZCDv9ixoUB5u
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
         monkeypatch.setattr(stripe.PaymentIntent, "retrieve", mock_payment_intent_get)

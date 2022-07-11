@@ -425,7 +425,7 @@ class StripeModel(StripeBaseModel):
         :type stripe_account: string
         :return:
         """
-        from djstripe.models import DjstripePaymentMethod
+        from djstripe.models import DjstripePaymentMethod, InvoiceOrLineItem
 
         field_data = None
         field_name = field.name
@@ -434,8 +434,8 @@ class StripeModel(StripeBaseModel):
         # a flag to indicate if the given field is null upstream on Stripe
         is_nulled = False
 
-        if issubclass(field.related_model, StripeModel) or issubclass(
-            field.related_model, DjstripePaymentMethod
+        if issubclass(
+            field.related_model, (StripeModel, DjstripePaymentMethod, InvoiceOrLineItem)
         ):
 
             if field_name in manipulated_data:
@@ -852,22 +852,22 @@ class StripeModel(StripeBaseModel):
         instance.total_tax_amounts.exclude(pk__in=pks).delete()
 
     @classmethod
-    def _stripe_object_to_invoice_items(
+    def _stripe_object_to_line_items(
         cls, target_cls, data, invoice, api_key=djstripe_settings.STRIPE_SECRET_KEY
     ):
         """
-        Retrieves InvoiceItems for an invoice.
+        Retrieves LineItems for an invoice.
 
-        If the invoice item doesn't exist already then it is created.
+        If the line item doesn't exist already then it is created.
 
         If the invoice is an upcoming invoice that doesn't persist to the
-        database (i.e. ephemeral) then the invoice items are also not saved.
+        database (i.e. ephemeral) then the line items are also not saved.
 
-        :param target_cls: The target class to instantiate per invoice item.
-        :type target_cls:  Type[djstripe.models.InvoiceItem]
+        :param target_cls: The target class to instantiate per invoice or line item.
+        :type target_cls:  Type[djstripe.models.LineItem]
         :param data: The data dictionary received from the Stripe API.
         :type data: dict
-        :param invoice: The invoice object that should hold the invoice items.
+        :param invoice: The invoice object that should hold the line items.
         :type invoice: ``djstripe.models.Invoice``
         """
 
@@ -875,7 +875,7 @@ class StripeModel(StripeBaseModel):
         if not lines:
             return []
 
-        invoiceitems = []
+        lineitems = []
         for line in lines.auto_paging_iter():
             if invoice.id:
                 save = True
@@ -901,9 +901,9 @@ class StripeModel(StripeBaseModel):
             item, _ = target_cls._get_or_create_from_stripe_object(
                 line, refetch=False, save=save, api_key=api_key
             )
-            invoiceitems.append(item)
+            lineitems.append(item)
 
-        return invoiceitems
+        return lineitems
 
     @classmethod
     def _stripe_object_to_subscription_items(
