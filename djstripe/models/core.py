@@ -1237,17 +1237,12 @@ class Customer(StripeModel):
         )
         return self.default_source is not None
 
-    def add_coupon(self, coupon, idempotency_key=None):
+    def add_discount(self, discount: dict, idempotency_key=None):
         """
-        Add a coupon to a Customer.
-
-        The coupon can be a Coupon object, or a valid Stripe Coupon ID.
+        Add a Discount to a Customer.
         """
-        if isinstance(coupon, StripeModel):
-            coupon = coupon.id
-
         stripe_customer = self.api_retrieve()
-        stripe_customer["coupon"] = coupon
+        stripe_customer["discount"] = discount
         stripe_customer.save(idempotency_key=idempotency_key)
         return self.__class__.sync_from_stripe_data(
             stripe_customer, api_key=self.default_api_key
