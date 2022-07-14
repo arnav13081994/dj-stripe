@@ -662,24 +662,6 @@ class Customer(StripeModel):
         blank=True,
         help_text="Whether the Customer instance has been deleted upstream in Stripe or not.",
     )
-    # <discount>
-    coupon = models.ForeignKey(
-        "Coupon", null=True, blank=True, on_delete=models.SET_NULL
-    )
-    coupon_start = StripeDateTimeField(
-        null=True,
-        blank=True,
-        editable=False,
-        help_text="If a coupon is present, the date at which it was applied.",
-    )
-    coupon_end = StripeDateTimeField(
-        null=True,
-        blank=True,
-        editable=False,
-        help_text="If a coupon is present and has a limited duration, "
-        "the date that the discount will end.",
-    )
-    # </discount>
     discount = JSONField(
         null=True,
         blank=True,
@@ -771,11 +753,6 @@ class Customer(StripeModel):
         else:
             # set "deleted" key to False (default)
             data["deleted"] = False
-
-        discount = data.get("discount")
-        if discount:
-            data["coupon_start"] = discount["start"]
-            data["coupon_end"] = discount["end"]
 
         # Populate the object id for our default_payment_method field (or set it None)
         data["default_payment_method"] = data.get("invoice_settings", {}).get(
@@ -1296,7 +1273,6 @@ class Customer(StripeModel):
         pending_relations=None,
         api_key=djstripe_settings.STRIPE_SECRET_KEY,
     ):  # noqa (function complexity)
-        from .billing import Coupon
         from .payment_methods import DjstripePaymentMethod
 
         super()._attach_objects_post_save_hook(
@@ -1316,18 +1292,6 @@ class Customer(StripeModel):
                     source, source["object"], api_key=api_key
                 )
                 sources[source["id"]] = obj
-
-        discount = data.get("discount")
-        if discount:
-            coupon, _created = Coupon._get_or_create_from_stripe_object(
-                discount, "coupon", api_key=api_key
-            )
-            if coupon and coupon != self.coupon:
-                self.coupon = coupon
-                save = True
-        elif self.coupon:
-            self.coupon = None
-            save = True
 
         if save:
             self.save()

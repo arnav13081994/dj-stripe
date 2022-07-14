@@ -72,7 +72,6 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             usage_record_summary,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
                 "djstripe.Subscription.default_payment_method",
@@ -146,7 +145,6 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             usage_record_summary,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
                 "djstripe.Subscription.default_payment_method",
@@ -167,13 +165,13 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
                 call(
                     id=FAKE_INVOICE_METERED_SUBSCRIPTION["id"],
                     api_key=djstripe_settings.STRIPE_SECRET_KEY,
-                    expand=[],
+                    expand=["discounts"],
                     stripe_account=None,
                 ),
                 call(
                     id="in_16af5A2eZvKYlo2CJjANLL81",
                     api_key=djstripe_settings.STRIPE_SECRET_KEY,
-                    expand=[],
+                    expand=["discounts"],
                     stripe_account=None,
                 ),
             ]

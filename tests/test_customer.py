@@ -156,7 +156,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
             },
@@ -174,7 +173,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
             },
@@ -206,7 +204,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.default_source",
             },
@@ -279,7 +276,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
             },
         )
@@ -308,7 +304,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.default_source",
             },
@@ -330,7 +325,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
             },
@@ -361,7 +355,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.subscriber",
             },
         )
@@ -394,7 +387,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.subscriber",
             },
         )
@@ -420,7 +412,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.subscriber",
                 "djstripe.Customer.default_payment_method",
             },
@@ -660,7 +651,7 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
             self.customer.invoice_settings["default_payment_method"],
         )
 
-        self.assert_fks(self.customer, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(self.customer, expected_blank_fks={})
 
     @patch("stripe.Customer.retrieve", autospec=True)
     @patch("stripe.PaymentMethod.attach", return_value=deepcopy(FAKE_PAYMENT_METHOD_I))
@@ -714,7 +705,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             self.customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_source",
             },
         )
@@ -761,7 +751,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             self.customer,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.default_source",
             },
@@ -883,7 +872,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
                 "djstripe.Charge.on_behalf_of",
                 "djstripe.Charge.source_transfer",
                 "djstripe.Charge.transfer",
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.PaymentIntent.invoice (related name)",
                 "djstripe.PaymentIntent.on_behalf_of",
@@ -915,7 +903,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
                 "djstripe.Charge.on_behalf_of",
                 "djstripe.Charge.source_transfer",
                 "djstripe.Charge.transfer",
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.PaymentIntent.invoice (related name)",
                 "djstripe.PaymentIntent.on_behalf_of",
@@ -978,7 +965,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
                 "djstripe.Charge.on_behalf_of",
                 "djstripe.Charge.source_transfer",
                 "djstripe.Charge.transfer",
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.PaymentIntent.invoice (related name)",
                 "djstripe.PaymentIntent.on_behalf_of",
@@ -1004,7 +990,6 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
                 "djstripe.Charge.on_behalf_of",
                 "djstripe.Charge.source_transfer",
                 "djstripe.Charge.transfer",
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.PaymentIntent.invoice (related name)",
                 "djstripe.PaymentIntent.on_behalf_of",
@@ -1586,37 +1571,37 @@ class TestCustomer(AssertStripeFksMixin, TestCase):
             api_key=djstripe_settings.STRIPE_SECRET_KEY, customer=self.customer.id
         )
 
-    @patch("stripe.Coupon.retrieve", return_value=deepcopy(FAKE_COUPON), autospec=True)
-    def test_sync_customer_with_discount(self, coupon_retrieve_mock):
-        self.assertIsNone(self.customer.coupon)
-        fake_customer = deepcopy(FAKE_CUSTOMER)
-        fake_customer["discount"] = deepcopy(FAKE_DISCOUNT_CUSTOMER)
-        customer = Customer.sync_from_stripe_data(fake_customer)
-        self.assertEqual(customer.coupon.id, FAKE_COUPON["id"])
-        self.assertIsNotNone(customer.coupon_start)
-        self.assertIsNone(customer.coupon_end)
-
-    @patch("stripe.Coupon.retrieve", return_value=deepcopy(FAKE_COUPON), autospec=True)
-    def test_sync_customer_discount_already_present(self, coupon_retrieve_mock):
+    def test_sync_customer_with_discount(self):
+        self.assertIsNone(self.customer.discount)
         fake_customer = deepcopy(FAKE_CUSTOMER)
         fake_customer["discount"] = deepcopy(FAKE_DISCOUNT_CUSTOMER)
 
-        # Set the customer's coupon to be what we'll sync
+        # Create Customer with Discount applied
+        Customer.sync_from_stripe_data(fake_customer)
+
+        # Refresh the instance from the DB.
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.discount["id"], "di_fakefakefakefakefake0002")
+
+    def test_sync_customer_discount_already_present(self):
+        fake_customer = deepcopy(FAKE_CUSTOMER)
+        fake_customer["discount"] = deepcopy(FAKE_DISCOUNT_CUSTOMER)
+
+        # Set the customer's discount to be what we'll sync
         customer = Customer.objects.get(id=FAKE_CUSTOMER["id"])
-        customer.coupon = Coupon.sync_from_stripe_data(FAKE_COUPON)
+        customer.discount = deepcopy(FAKE_DISCOUNT_CUSTOMER)
         customer.save()
 
         customer = Customer.sync_from_stripe_data(fake_customer)
-        self.assertEqual(customer.coupon.id, FAKE_COUPON["id"])
+        self.assertEqual(customer.discount["id"], "di_fakefakefakefakefake0002")
 
     def test_sync_customer_delete_discount(self):
-        test_coupon = Coupon.sync_from_stripe_data(FAKE_COUPON)
-        self.customer.coupon = test_coupon
+        self.customer.discount = deepcopy(FAKE_DISCOUNT_CUSTOMER)
         self.customer.save()
-        self.assertEqual(self.customer.coupon.id, FAKE_COUPON["id"])
+        self.assertEqual(self.customer.discount["id"], "di_fakefakefakefakefake0002")
 
         customer = Customer.sync_from_stripe_data(FAKE_CUSTOMER)
-        self.assertEqual(customer.coupon, None)
+        self.assertEqual(customer.discount, None)
 
     @patch(
         "djstripe.models.Invoice.sync_from_stripe_data",

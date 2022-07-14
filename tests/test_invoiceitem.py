@@ -52,7 +52,6 @@ class InvoiceItemTest(AssertStripeFksMixin, TestCase):
             "djstripe.Charge.on_behalf_of",
             "djstripe.Charge.source_transfer",
             "djstripe.Charge.transfer",
-            "djstripe.Customer.coupon",
             "djstripe.Customer.default_payment_method",
             "djstripe.Customer.subscriber",
             "djstripe.Invoice.default_payment_method",
@@ -257,7 +256,7 @@ class InvoiceItemTest(AssertStripeFksMixin, TestCase):
 
         invoice_retrieve_mock.assert_called_once_with(
             api_key=djstripe_settings.STRIPE_SECRET_KEY,
-            expand=[],
+            expand=["discounts"],
             id=FAKE_INVOICE_II["id"],
             stripe_account=None,
         )
