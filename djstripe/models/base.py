@@ -425,7 +425,7 @@ class StripeModel(StripeBaseModel):
         :type stripe_account: string
         :return:
         """
-        from djstripe.models import DjstripePaymentMethod
+        from djstripe.models import DjstripePaymentMethod, InvoiceOrLineItem
 
         field_data = None
         field_name = field.name
@@ -434,8 +434,8 @@ class StripeModel(StripeBaseModel):
         # a flag to indicate if the given field is null upstream on Stripe
         is_nulled = False
 
-        if issubclass(field.related_model, StripeModel) or issubclass(
-            field.related_model, DjstripePaymentMethod
+        if issubclass(
+            field.related_model, (StripeModel, DjstripePaymentMethod, InvoiceOrLineItem)
         ):
 
             if field_name in manipulated_data:
