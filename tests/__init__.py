@@ -1401,7 +1401,17 @@ class InvoiceDict(StripeItem):
         return self
 
 
-FAKE_INVOICE = InvoiceDict(load_fixture("invoice_in_fakefakefakefakefake0001.json"))
+FAKE_INVOICE = load_fixture("invoice_in_fakefakefakefakefake0001.json")
+FAKE_INVOICE["lines"] = {
+    "object": "list",
+    "data": [deepcopy(FAKE_LINE_ITEM)],
+    "has_more": False,
+    "total_count": 1,
+    "url": "/v1/invoices/in_fakefakefakefakefake0001/lines",
+}
+FAKE_INVOICE = InvoiceDict(FAKE_INVOICE)
+
+
 FAKE_INVOICE_IV = InvoiceDict(load_fixture("invoice_in_fakefakefakefakefake0004.json"))
 
 
@@ -1426,24 +1436,7 @@ FAKE_INVOICE_II = InvoiceDict(
         "due_date": None,
         "ending_balance": 0,
         "lines": {
-            "data": [
-                {
-                    "id": FAKE_SUBSCRIPTION_III["id"],
-                    "object": "line_item",
-                    "amount": 2000,
-                    "currency": "usd",
-                    "description": None,
-                    "discountable": True,
-                    "livemode": True,
-                    "metadata": {},
-                    "period": {"start": 1442469907, "end": 1445061907},
-                    "plan": deepcopy(FAKE_PLAN),
-                    "proration": False,
-                    "quantity": 1,
-                    "subscription": None,
-                    "type": "subscription",
-                }
-            ],
+            "data": [deepcopy(FAKE_LINE_ITEM_SUBSCRIPTION)],
             "total_count": 1,
             "object": "list",
             "url": "/v1/invoices/in_16af5A2eZvKYlo2CJjANLL81/lines",
@@ -1489,24 +1482,7 @@ FAKE_INVOICE_III = InvoiceDict(
         "due_date": None,
         "ending_balance": 20,
         "lines": {
-            "data": [
-                {
-                    "id": FAKE_SUBSCRIPTION["id"],
-                    "object": "line_item",
-                    "amount": 2000,
-                    "currency": "usd",
-                    "description": None,
-                    "discountable": True,
-                    "livemode": True,
-                    "metadata": {},
-                    "period": {"start": 1442111228, "end": 1444703228},
-                    "plan": deepcopy(FAKE_PLAN),
-                    "proration": False,
-                    "quantity": 1,
-                    "subscription": None,
-                    "type": "subscription",
-                }
-            ],
+            "data": [deepcopy(FAKE_LINE_ITEM_SUBSCRIPTION)],
             "total_count": 1,
             "object": "list",
             "url": "/v1/invoices/in_16Z9dP2eZvKYlo2CgFHgFx2Z/lines",
@@ -1571,25 +1547,7 @@ FAKE_INVOICE_METERED_SUBSCRIPTION = InvoiceDict(
         "due_date": None,
         "ending_balance": 0,
         "lines": {
-            "data": [
-                {
-                    "amount": 2000,
-                    "id": FAKE_INVOICE_METERED_SUBSCRIPTION_USAGE["id"],
-                    "object": "line_item",
-                    "currency": "usd",
-                    "description": None,
-                    "discountable": True,
-                    "livemode": True,
-                    "metadata": {},
-                    "period": {"start": 1442111228, "end": 1444703228},
-                    "plan": deepcopy(FAKE_PLAN_METERED),
-                    "proration": False,
-                    "quantity": 1,
-                    "subscription": FAKE_INVOICE_METERED_SUBSCRIPTION_USAGE["id"],
-                    "subscription_item": FAKE_SUBSCRIPTION_ITEM["id"],
-                    "type": "subscription",
-                }
-            ],
+            "data": [deepcopy(FAKE_LINE_ITEM_SUBSCRIPTION)],
             "total_count": 1,
             "object": "list",
             "url": "/v1/invoices/in_1JGGM6JSZQVUcJYgpWqfBOIl/lines",
@@ -1647,32 +1605,7 @@ FAKE_UPCOMING_INVOICE = InvoiceDict(
         "due_date": None,
         "ending_balance": None,
         "lines": {
-            "data": [
-                {
-                    "id": FAKE_SUBSCRIPTION["id"],
-                    "object": "line_item",
-                    "amount": 2000,
-                    "currency": "usd",
-                    "description": None,
-                    "discountable": True,
-                    "livemode": True,
-                    "metadata": {},
-                    "period": {"start": 1441907581, "end": 1444499581},
-                    "plan": deepcopy(FAKE_PLAN),
-                    "proration": False,
-                    "quantity": 1,
-                    "subscription": None,
-                    "tax_amounts": [
-                        {
-                            "amount": 261,
-                            "inclusive": True,
-                            "tax_rate": "txr_fakefakefakefakefake0001",
-                        }
-                    ],
-                    "tax_rates": [],
-                    "type": "subscription",
-                }
-            ],
+            "data": [deepcopy(FAKE_LINE_ITEM_SUBSCRIPTION)],
             "total_count": 1,
             "object": "list",
             "url": "/v1/invoices/in_fakefakefakefakefake0001/lines",
@@ -1747,8 +1680,8 @@ FAKE_EVENT_TAX_ID_DELETED["type"] = "customer.tax_id.deleted"
 
 FAKE_TAX_CODE = load_fixture("tax_code_txcd_fakefakefakefakefake0001.json")
 
-FAKE_INVOICEITEM = {
-    "id": "ii_16XVTY2eZvKYlo2Cxz5n3RaS",
+FAKE_INVOICEITEM_II = {
+    "id": "ii_fakefakefakefakefake0001",
     "object": "invoiceitem",
     "amount": 2000,
     "currency": "usd",
@@ -1772,8 +1705,8 @@ FAKE_INVOICEITEM = {
     "unit_amount_decimal": "2000",
 }
 
-FAKE_INVOICEITEM_II = {
-    "id": "ii_16XVTY2eZvKYlo2Cxz5n3RaS",
+FAKE_INVOICEITEM = {
+    "id": "ii_fakefakefakefakefake0001",  # todo make these ids unique as well
     "object": "invoiceitem",
     "amount": 2000,
     "currency": "usd",
@@ -1800,7 +1733,7 @@ FAKE_INVOICEITEM_II = {
 # Invoice item with tax_rates
 # TODO generate this
 FAKE_INVOICEITEM_III = {
-    "id": "ii_16XVTY2eZvKYlo2Cxz5n3RaS",
+    "id": "ii_fakefakefakefakefake0001",  # todo make these ids unique as well
     "object": "invoiceitem",
     "amount": 2000,
     "currency": "usd",

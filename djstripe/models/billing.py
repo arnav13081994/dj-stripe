@@ -683,10 +683,10 @@ class BaseInvoice(StripeModel):
             cls, data, api_key=api_key, pending_relations=pending_relations
         )
 
-        # InvoiceItems need a saved invoice because they're associated via a
+        # LineItems need a saved invoice because they're associated via a
         # RelatedManager, so this must be done as part of the post save hook.
-        cls._stripe_object_to_invoice_items(
-            target_cls=InvoiceItem, data=data, invoice=self, api_key=api_key
+        cls._stripe_object_to_line_items(
+            target_cls=LineItem, data=data, invoice=self, api_key=api_key
         )
 
     @property
@@ -813,7 +813,8 @@ class UpcomingInvoice(BaseInvoice):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._invoiceitems = []
+
+        self._lineitems = []
         self._default_tax_rates = []
         self._total_tax_amounts = []
 
@@ -826,8 +827,9 @@ class UpcomingInvoice(BaseInvoice):
         super()._attach_objects_hook(
             cls, data, api_key=api_key, current_ids=current_ids
         )
-        self._invoiceitems = cls._stripe_object_to_invoice_items(
-            target_cls=InvoiceItem, data=data, invoice=self, api_key=api_key
+
+        self._lineitems = cls._stripe_object_to_line_items(
+            target_cls=LineItem, data=data, invoice=self, api_key=api_key
         )
 
     def _attach_objects_post_save_hook(
@@ -1062,10 +1064,6 @@ class InvoiceItem(StripeModel):
 
     def __str__(self):
         return self.description
-
-    @classmethod
-    def is_valid_object(cls, data):
-        return "object" in data and data["object"] in ("invoiceitem", "line_item")
 
     def get_stripe_dashboard_url(self):
         return self.invoice.get_stripe_dashboard_url()

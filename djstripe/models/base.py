@@ -852,45 +852,34 @@ class StripeModel(StripeBaseModel):
         instance.total_tax_amounts.exclude(pk__in=pks).delete()
 
     @classmethod
-    def _stripe_object_to_invoice_items(
+    def _stripe_object_to_line_items(
         cls, target_cls, data, invoice, api_key=djstripe_settings.STRIPE_SECRET_KEY
     ):
         """
-        Retrieves InvoiceItems for an invoice.
+        Retrieves LineItems for an invoice.
 
-        If the invoice item doesn't exist already then it is created.
+        If the line item doesn't exist already then it is created.
 
         If the invoice is an upcoming invoice that doesn't persist to the
-        database (i.e. ephemeral) then the invoice items are also not saved.
+        database (i.e. ephemeral) then the line items are also not saved.
 
-        :param target_cls: The target class to instantiate per invoice item.
-        :type target_cls:  Type[djstripe.models.InvoiceItem]
+        :param target_cls: The target class to instantiate per line item.
+        :type target_cls:  Type[djstripe.models.LineItem]
         :param data: The data dictionary received from the Stripe API.
         :type data: dict
-        :param invoice: The invoice object that should hold the invoice items.
+        :param invoice: The invoice object that should hold the line items.
         :type invoice: ``djstripe.models.Invoice``
         """
-
         lines = data.get("lines")
         if not lines:
             return []
 
-        invoiceitems = []
+        lineitems = []
         for line in lines.auto_paging_iter():
             if invoice.id:
                 save = True
                 line.setdefault("invoice", invoice.id)
 
-                if line.get("type") == "subscription":
-                    # Lines for subscriptions need to be keyed based on invoice and
-                    # subscription, because their id is *just* the subscription
-                    # when received from Stripe. This means that future updates to
-                    # a subscription will change previously saved invoices - Doing
-                    # the composite key avoids this.
-                    if not line["id"].startswith(invoice.id):
-                        line["id"] = "{invoice_id}-{subscription_id}".format(
-                            invoice_id=invoice.id, subscription_id=line["id"]
-                        )
             else:
                 # Don't save invoice items for ephemeral invoices
                 save = False
@@ -901,9 +890,9 @@ class StripeModel(StripeBaseModel):
             item, _ = target_cls._get_or_create_from_stripe_object(
                 line, refetch=False, save=save, api_key=api_key
             )
-            invoiceitems.append(item)
+            lineitems.append(item)
 
-        return invoiceitems
+        return lineitems
 
     @classmethod
     def _stripe_object_to_subscription_items(
