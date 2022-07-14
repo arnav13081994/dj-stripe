@@ -434,6 +434,11 @@ class IntentStatus(Enum):
     )
 
 
+class LineItem(Enum):
+    invoiceitem = _("Invoice Item")
+    subscription = _("Subscription")
+
+
 class MandateStatus(Enum):
     active = _("Active")
     inactive = _("Inactive")
