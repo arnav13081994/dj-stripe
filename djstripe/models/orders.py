@@ -1,6 +1,9 @@
 import stripe
 from django.db import models
 
+from djstripe.models.billing import Discount
+from djstripe.settings import djstripe_settings
+
 from ..enums import OrderStatus
 from ..fields import (
     JSONField,
@@ -22,7 +25,7 @@ class Order(StripeModel):
     """
 
     stripe_class = stripe.Order
-    expand_fields = ["customer", "line_items"]
+    expand_fields = ["customer", "line_items", "discounts"]
     stripe_dashboard_item_name = "orders"
 
     amount_subtotal = StripeQuantumCurrencyAmountField(
@@ -123,6 +126,21 @@ class Order(StripeModel):
     def _manipulate_stripe_object_hook(cls, data):
         data["payment_intent"] = data["payment"]["payment_intent"]
         return data
+
+    def _attach_objects_post_save_hook(
+        self,
+        cls,
+        data,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+        pending_relations=None,
+    ):
+        super()._attach_objects_post_save_hook(
+            cls, data, api_key=api_key, pending_relations=pending_relations
+        )
+
+        # sync every discount
+        for discount in self.discounts:
+            Discount.sync_from_stripe_data(discount, api_key=api_key)
 
     def cancel(self, api_key=None, stripe_account=None, **kwargs):
         """

@@ -50,7 +50,7 @@ class PriceCreateTest(AssertStripeFksMixin, TestCase):
 
         price_create_mock.assert_called_once_with(**expected_create_kwargs)
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
     @patch(
         "stripe.Product.retrieve", return_value=deepcopy(FAKE_PRODUCT), autospec=True
@@ -71,7 +71,7 @@ class PriceCreateTest(AssertStripeFksMixin, TestCase):
             api_key=djstripe_settings.STRIPE_SECRET_KEY, **expected_create_kwargs
         )
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
     @patch(
         "stripe.Product.retrieve", return_value=deepcopy(FAKE_PRODUCT), autospec=True
@@ -91,7 +91,7 @@ class PriceCreateTest(AssertStripeFksMixin, TestCase):
             api_key=djstripe_settings.STRIPE_SECRET_KEY, **FAKE_PRICE
         )
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
     @patch(
         "stripe.Product.retrieve", return_value=deepcopy(FAKE_PRODUCT), autospec=True
@@ -113,7 +113,7 @@ class PriceCreateTest(AssertStripeFksMixin, TestCase):
             api_key=djstripe_settings.STRIPE_SECRET_KEY, **expected_create_kwargs
         )
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
 
 class PriceTest(AssertStripeFksMixin, TestCase):
@@ -138,7 +138,7 @@ class PriceTest(AssertStripeFksMixin, TestCase):
         )
         price = Price.sync_from_stripe_data(stripe_price)
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
         assert price.human_readable_price == "$20.00 USD/month"
 
@@ -150,7 +150,7 @@ class PriceTest(AssertStripeFksMixin, TestCase):
         assert price.unit_amount is None
         assert price.tiers is not None
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
     @patch("stripe.Price.retrieve", autospec=True)
     def test_stripe_metered_price(self, price_retrieve_mock):
@@ -160,7 +160,7 @@ class PriceTest(AssertStripeFksMixin, TestCase):
         assert price.recurring["usage_type"] == PriceUsageType.metered
         assert price.unit_amount is not None
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
     @patch("stripe.Price.retrieve", autospec=True)
     def test_stripe_onetime_price(self, price_retrieve_mock):
@@ -171,7 +171,7 @@ class PriceTest(AssertStripeFksMixin, TestCase):
         assert not price.recurring
         assert price.type == PriceType.one_time
 
-        self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
+        self.assert_fks(price, expected_blank_fks={})
 
 
 class TestStrPrice:

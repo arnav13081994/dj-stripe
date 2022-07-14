@@ -2,7 +2,7 @@
 dj-stripe UsageRecordSummary model tests
 """
 from copy import deepcopy
-from unittest.mock import PropertyMock, patch
+from unittest.mock import PropertyMock, call, patch
 
 import pytest
 from django.test.testcases import TestCase
@@ -14,6 +14,9 @@ from . import (
     FAKE_CUSTOMER_II,
     FAKE_INVOICE_METERED_SUBSCRIPTION,
     FAKE_INVOICE_METERED_SUBSCRIPTION_USAGE,
+    FAKE_INVOICEITEM,
+    FAKE_INVOICEITEM_II,
+    FAKE_LINE_ITEM,
     FAKE_PLAN_METERED,
     FAKE_PRODUCT,
     FAKE_SUBSCRIPTION_ITEM,
@@ -69,7 +72,6 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             usage_record_summary,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
                 "djstripe.Subscription.default_payment_method",
@@ -103,6 +105,16 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
         autospec=True,
     )
     @patch(
+        "stripe.LineItem.retrieve",
+        return_value=deepcopy(FAKE_LINE_ITEM),
+        autospec=True,
+    )
+    @patch(
+        "stripe.InvoiceItem.retrieve",
+        return_value=deepcopy(FAKE_INVOICEITEM_II),
+        autospec=True,
+    )
+    @patch(
         "stripe.Invoice.retrieve",
         return_value=deepcopy(FAKE_INVOICE_METERED_SUBSCRIPTION),
         autospec=True,
@@ -110,6 +122,8 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
     def test_sync_from_stripe_data(
         self,
         invoice_retrieve_mock,
+        invoice_item_retrieve_mock,
+        line_item_retrieve_mock,
         subscription_retrieve_mock,
         subscription_item_retrieve_mock,
         customer_retrieve_mock,
@@ -131,7 +145,6 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
         self.assert_fks(
             usage_record_summary,
             expected_blank_fks={
-                "djstripe.Customer.coupon",
                 "djstripe.Customer.default_payment_method",
                 "djstripe.Customer.subscriber",
                 "djstripe.Subscription.default_payment_method",
@@ -146,12 +159,22 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
             },
         )
 
-        # assert invoice_retrieve_mock was called once
-        invoice_retrieve_mock.assert_called_once_with(
-            id=FAKE_INVOICE_METERED_SUBSCRIPTION["id"],
-            api_key=djstripe_settings.STRIPE_SECRET_KEY,
-            expand=[],
-            stripe_account=None,
+        # assert invoice_retrieve_mock was called like so:
+        invoice_retrieve_mock.assert_has_calls(
+            [
+                call(
+                    id=FAKE_INVOICE_METERED_SUBSCRIPTION["id"],
+                    api_key=djstripe_settings.STRIPE_SECRET_KEY,
+                    expand=["discounts"],
+                    stripe_account=None,
+                ),
+                call(
+                    id="in_16af5A2eZvKYlo2CJjANLL81",
+                    api_key=djstripe_settings.STRIPE_SECRET_KEY,
+                    expand=["discounts"],
+                    stripe_account=None,
+                ),
+            ]
         )
 
     @patch(
@@ -176,6 +199,16 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
         autospec=True,
     )
     @patch(
+        "stripe.LineItem.retrieve",
+        return_value=deepcopy(FAKE_LINE_ITEM),
+        autospec=True,
+    )
+    @patch(
+        "stripe.InvoiceItem.retrieve",
+        return_value=deepcopy(FAKE_INVOICEITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Invoice.retrieve",
         return_value=deepcopy(FAKE_INVOICE_METERED_SUBSCRIPTION),
         autospec=True,
@@ -183,6 +216,8 @@ class TestUsageRecordSummary(AssertStripeFksMixin, TestCase):
     def test___str__(
         self,
         invoice_retrieve_mock,
+        invoice_item_retrieve_mock,
+        line_item_retrieve_mock,
         subscription_retrieve_mock,
         subscription_item_retrieve_mock,
         customer_retrieve_mock,

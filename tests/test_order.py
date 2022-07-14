@@ -18,6 +18,8 @@ from . import (
     FAKE_CHARGE,
     FAKE_CUSTOMER,
     FAKE_INVOICE,
+    FAKE_INVOICEITEM,
+    FAKE_LINE_ITEM,
     FAKE_ORDER_WITH_CUSTOMER_WITH_PAYMENT_INTENT,
     FAKE_ORDER_WITH_CUSTOMER_WITHOUT_PAYMENT_INTENT,
     FAKE_ORDER_WITHOUT_CUSTOMER_WITH_PAYMENT_INTENT,
@@ -27,6 +29,7 @@ from . import (
     FAKE_PLATFORM_ACCOUNT,
     FAKE_PRODUCT,
     FAKE_SUBSCRIPTION,
+    FAKE_SUBSCRIPTION_ITEM,
     AssertStripeFksMixin,
 )
 
@@ -37,6 +40,11 @@ class TestOrder(AssertStripeFksMixin, TestCase):
     @patch(
         "stripe.BalanceTransaction.retrieve",
         return_value=deepcopy(FAKE_BALANCE_TRANSACTION),
+        autospec=True,
+    )
+    @patch(
+        "stripe.SubscriptionItem.retrieve",
+        return_value=deepcopy(FAKE_SUBSCRIPTION_ITEM),
         autospec=True,
     )
     @patch(
@@ -62,21 +70,27 @@ class TestOrder(AssertStripeFksMixin, TestCase):
         "stripe.Customer.retrieve", return_value=deepcopy(FAKE_CUSTOMER), autospec=True
     )
     @patch(
+        "stripe.InvoiceItem.retrieve",
+        return_value=deepcopy(FAKE_INVOICEITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Invoice.retrieve", return_value=deepcopy(FAKE_INVOICE), autospec=True
     )
     def test_sync_from_stripe_data(
         self,
         invoice_retrieve_mock,
+        invoice_item_retrieve_mock,
         customer_retrieve_mock,
         product_retrieve_mock,
         payment_intent_retrieve_mock,
         paymentmethod_card_retrieve_mock,
         charge_retrieve_mock,
         subscription_retrieve_mock,
+        subscription_item_retrieve_mock,
         balance_transaction_retrieve_mock,
     ):
         default_expected_blank_fks = {
-            "djstripe.Customer.coupon",
             "djstripe.Customer.default_payment_method",
             "djstripe.Customer.subscriber",
             "djstripe.Charge.latest_upcominginvoice (related name)",
@@ -206,9 +220,18 @@ class TestOrderStr:
             """Monkeypatched stripe.Invoice.retrieve"""
             return deepcopy(FAKE_INVOICE)
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_subscription_get(*args, **kwargs):
             """Monkeypatched stripe.Subscription.retrieve"""
             return deepcopy(FAKE_SUBSCRIPTION)
+
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
 
         def mock_balance_transaction_get(*args, **kwargs):
             """Monkeypatched stripe.BalanceTransaction.retrieve"""
@@ -231,7 +254,12 @@ class TestOrderStr:
 
         # because of Reverse o2o field sync due to PaymentIntent.sync_from_stripe_data..
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
@@ -270,6 +298,11 @@ class TestOrderMethods:
         autospec=True,
     )
     @patch(
+        "stripe.SubscriptionItem.retrieve",
+        return_value=deepcopy(FAKE_SUBSCRIPTION_ITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Subscription.retrieve",
         return_value=deepcopy(FAKE_SUBSCRIPTION),
         autospec=True,
@@ -292,6 +325,11 @@ class TestOrderMethods:
         "stripe.Customer.retrieve", return_value=deepcopy(FAKE_CUSTOMER), autospec=True
     )
     @patch(
+        "stripe.InvoiceItem.retrieve",
+        return_value=deepcopy(FAKE_INVOICEITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Invoice.retrieve", return_value=deepcopy(FAKE_INVOICE), autospec=True
     )
     @patch(
@@ -301,12 +339,14 @@ class TestOrderMethods:
         self,
         order_cancel_mock,
         invoice_retrieve_mock,
+        invoice_item_retrieve_mock,
         customer_retrieve_mock,
         product_retrieve_mock,
         payment_intent_retrieve_mock,
         paymentmethod_card_retrieve_mock,
         charge_retrieve_mock,
         subscription_retrieve_mock,
+        subscription_item_retrieve_mock,
         balance_transaction_retrieve_mock,
         api_key,
         expected_api_key,
@@ -350,6 +390,11 @@ class TestOrderMethods:
         autospec=True,
     )
     @patch(
+        "stripe.SubscriptionItem.retrieve",
+        return_value=deepcopy(FAKE_SUBSCRIPTION_ITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Subscription.retrieve",
         return_value=deepcopy(FAKE_SUBSCRIPTION),
         autospec=True,
@@ -372,6 +417,11 @@ class TestOrderMethods:
         "stripe.Customer.retrieve", return_value=deepcopy(FAKE_CUSTOMER), autospec=True
     )
     @patch(
+        "stripe.InvoiceItem.retrieve",
+        return_value=deepcopy(FAKE_INVOICEITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Invoice.retrieve", return_value=deepcopy(FAKE_INVOICE), autospec=True
     )
     @patch(
@@ -381,12 +431,14 @@ class TestOrderMethods:
         self,
         order_reopen_mock,
         invoice_retrieve_mock,
+        invoice_item_retrieve_mock,
         customer_retrieve_mock,
         product_retrieve_mock,
         payment_intent_retrieve_mock,
         paymentmethod_card_retrieve_mock,
         charge_retrieve_mock,
         subscription_retrieve_mock,
+        subscription_item_retrieve_mock,
         balance_transaction_retrieve_mock,
         api_key,
         expected_api_key,
@@ -430,6 +482,11 @@ class TestOrderMethods:
         autospec=True,
     )
     @patch(
+        "stripe.SubscriptionItem.retrieve",
+        return_value=deepcopy(FAKE_SUBSCRIPTION_ITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Subscription.retrieve",
         return_value=deepcopy(FAKE_SUBSCRIPTION),
         autospec=True,
@@ -452,6 +509,11 @@ class TestOrderMethods:
         "stripe.Customer.retrieve", return_value=deepcopy(FAKE_CUSTOMER), autospec=True
     )
     @patch(
+        "stripe.InvoiceItem.retrieve",
+        return_value=deepcopy(FAKE_INVOICEITEM),
+        autospec=True,
+    )
+    @patch(
         "stripe.Invoice.retrieve", return_value=deepcopy(FAKE_INVOICE), autospec=True
     )
     @patch(
@@ -461,12 +523,14 @@ class TestOrderMethods:
         self,
         order_submit_mock,
         invoice_retrieve_mock,
+        invoice_item_retrieve_mock,
         customer_retrieve_mock,
         product_retrieve_mock,
         payment_intent_retrieve_mock,
         paymentmethod_card_retrieve_mock,
         charge_retrieve_mock,
         subscription_retrieve_mock,
+        subscription_item_retrieve_mock,
         balance_transaction_retrieve_mock,
         api_key,
         expected_api_key,

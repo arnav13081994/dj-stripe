@@ -26,10 +26,12 @@ from tests import (
     FAKE_CHARGE,
     FAKE_CUSTOMER,
     FAKE_INVOICE,
+    FAKE_INVOICEITEM,
     FAKE_PAYMENT_INTENT_I,
     FAKE_PLAN,
     FAKE_PRODUCT,
     FAKE_SUBSCRIPTION,
+    FAKE_SUBSCRIPTION_ITEM,
     FAKE_SUBSCRIPTION_SCHEDULE,
 )
 
@@ -63,7 +65,6 @@ pytestmark = pytest.mark.django_db
             [
                 "djstripe_owner_account",
                 "default_source",
-                "coupon",
                 "default_payment_method",
                 "subscriber",
             ],
@@ -469,13 +470,19 @@ class TestAdminRegisteredModelsChildrenOfStripeModel(TestCase):
 
                 # sub-classes of StripeModel
                 if model.__name__ not in self.ignore_models:
-                    if model.__name__ == "UsageRecordSummary":
+                    if model.__name__ in ("UsageRecordSummary", "LineItem"):
                         assert "_resync_instances" not in actions
                         assert "_sync_all_instances" in actions
                     elif model.__name__ == "Subscription":
                         assert "_resync_instances" in actions
                         assert "_sync_all_instances" in actions
                         assert "_cancel" in actions
+                    elif model.__name__ == "Discount":
+                        assert "_resync_instances" not in actions
+                        assert "_sync_all_instances" not in actions
+                    elif model.__name__ in ("Mandate", "UsageRecord"):
+                        assert "_resync_instances" in actions
+                        assert "_sync_all_instances" not in actions
                     else:
                         assert "_resync_instances" in actions
                         assert "_sync_all_instances" in actions
@@ -1112,9 +1119,13 @@ class TestCustomActionMixin:
         all_models_lst = app_config.get_models()
 
         for model in all_models_lst:
-            if model in site._registry.keys() and (
-                model.__name__ == "WebhookEndpoint"
-                or model.__name__ not in self.ignore_models
+            if (
+                model in site._registry.keys()
+                and model.__name__ not in ("Mandate", "UsageRecord", "Discount")
+                and (
+                    model.__name__ == "WebhookEndpoint"
+                    or model.__name__ not in self.ignore_models
+                )
             ):
 
                 # get the standard changelist_view url
@@ -1134,13 +1145,16 @@ class TestCustomActionMixin:
 
 
 class TestSubscriptionAdminCustomAction:
-    def test__cancel_subscription_instances(
+    def test__cancel_subscription_instances(  # noqa: C901
         self,
         admin_client,
         monkeypatch,
     ):
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
+
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
 
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
@@ -1157,6 +1171,9 @@ class TestSubscriptionAdminCustomAction:
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
 
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
+
         def mock_balance_transaction_get(*args, **kwargs):
             return FAKE_BALANCE_TRANSACTION
 
@@ -1169,11 +1186,15 @@ class TestSubscriptionAdminCustomAction:
         # monkeypatch stripe retrieve calls to return
         # the desired json response.
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
         monkeypatch.setattr(
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
         monkeypatch.setattr(stripe.PaymentIntent, "retrieve", mock_payment_intent_get)
@@ -1201,7 +1222,7 @@ class TestSubscriptionAdminCustomAction:
 
 
 class TestSubscriptionScheduleAdminCustomAction:
-    def test__release_subscription_schedule(
+    def test__release_subscription_schedule(  # noqa: C901
         self,
         admin_client,
         monkeypatch,
@@ -1211,6 +1232,9 @@ class TestSubscriptionScheduleAdminCustomAction:
 
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
+
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
 
         def mock_charge_get(*args, **kwargs):
             return FAKE_CHARGE
@@ -1227,6 +1251,9 @@ class TestSubscriptionScheduleAdminCustomAction:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -1239,6 +1266,9 @@ class TestSubscriptionScheduleAdminCustomAction:
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
@@ -1246,6 +1276,7 @@ class TestSubscriptionScheduleAdminCustomAction:
         monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
 
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
 
         monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)
@@ -1272,7 +1303,7 @@ class TestSubscriptionScheduleAdminCustomAction:
         # assert user got 200 status code
         assert response.status_code == 200
 
-    def test__cancel_subscription_schedule(
+    def test__cancel_subscription_schedule(  # noqa: C901
         self,
         admin_client,
         monkeypatch,
@@ -1282,6 +1313,9 @@ class TestSubscriptionScheduleAdminCustomAction:
 
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
+
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
 
         def mock_charge_get(*args, **kwargs):
             return FAKE_CHARGE
@@ -1298,6 +1332,9 @@ class TestSubscriptionScheduleAdminCustomAction:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -1310,6 +1347,9 @@ class TestSubscriptionScheduleAdminCustomAction:
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
@@ -1317,6 +1357,7 @@ class TestSubscriptionScheduleAdminCustomAction:
         monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
 
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
 
         monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)

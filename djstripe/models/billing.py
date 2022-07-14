@@ -1,3 +1,4 @@
+import logging
 import warnings
 from typing import Optional, Union
 
@@ -10,6 +11,7 @@ from stripe.error import InvalidRequestError
 
 from .. import enums
 from ..fields import (
+    InvoiceOrLineItemForeignKey,
     JSONField,
     PaymentMethodForeignKey,
     StripeCurrencyCodeField,
@@ -23,9 +25,11 @@ from ..fields import (
 )
 from ..managers import SubscriptionManager
 from ..settings import djstripe_settings
-from ..utils import QuerySetMock, get_friendly_currency_amount
+from ..utils import QuerySetMock, get_friendly_currency_amount, get_id_from_stripe_data
 from .base import StripeModel
 from .core import Customer
+
+logger = logging.getLogger(__name__)
 
 
 # TODO Mimic stripe-python decorator pattern to easily add and expose CRUD operations like create, update, delete etc on models
@@ -165,11 +169,8 @@ class Coupon(StripeModel):
     )
     # valid = models.BooleanField(editable=False)
 
-    class Meta:
+    class Meta(StripeModel.Meta):
         unique_together = ("id", "livemode")
-
-    stripe_class = stripe.Coupon
-    stripe_dashboard_item_name = "coupons"
 
     def __str__(self):
         if self.name:
@@ -201,6 +202,85 @@ class Coupon(StripeModel):
         )
 
 
+class Discount(StripeModel):
+    """
+    A discount represents the actual application of a coupon or promotion code.
+    It contains information about when the discount began,
+    when it will end, and what it is applied to.
+
+    Stripe documentation: https://stripe.com/docs/api/discounts
+    """
+
+    expand_fields = ["customer"]
+
+    checkout_session = StripeForeignKey(
+        "Session",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The Checkout session that this coupon is applied to, if it is applied to a particular session in payment mode. Will not be present for subscription mode.",
+    )
+    coupon = JSONField(
+        null=True,
+        blank=True,
+        help_text="Hash describing the coupon applied to create this discount.",
+    )
+    customer = StripeForeignKey(
+        "Customer",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The ID of the customer associated with this discount.",
+        related_name="customer_discounts",
+    )
+    end = StripeDateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If the coupon has a duration of repeating, the date that this discount will end. If the coupon has a duration of once or forever, this attribute will be null."
+        ),
+    )
+    invoice = StripeForeignKey(
+        "Invoice",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The invoice that the discount’s coupon was applied to, if it was applied directly to a particular invoice.",
+        related_name="invoice_discounts",
+    )
+    invoice_item = InvoiceOrLineItemForeignKey(
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The invoice item id (or invoice line item id for invoice line items of type=‘subscription’) that the discount’s coupon was applied to, if it was applied directly to a particular invoice item or invoice line item.",
+    )
+    promotion_code = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="The promotion code applied to create this discount.",
+    )
+    start = StripeDateTimeField(
+        null=True,
+        blank=True,
+        help_text=("Date that the coupon was applied."),
+    )
+    subscription = StripeForeignKey(
+        "subscription",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The subscription that this coupon is applied to, if it is applied to a particular subscription.",
+        related_name="subscription_discounts",
+    )
+
+    @classmethod
+    def is_valid_object(cls, data):
+        """
+        Returns whether the data is a valid object for the class
+        """
+        return "object" in data and data["object"] == "discount"
+
+
 class BaseInvoice(StripeModel):
     """
     The abstract base model shared by Invoice and UpcomingInvoice
@@ -212,6 +292,7 @@ class BaseInvoice(StripeModel):
 
     stripe_class = stripe.Invoice
     stripe_dashboard_item_name = "invoices"
+    expand_fields = ["discounts"]
 
     account_country = models.CharField(
         max_length=2,
@@ -373,9 +454,14 @@ class BaseInvoice(StripeModel):
     discount = JSONField(
         null=True,
         blank=True,
-        help_text="Describes the current discount applied to this "
+        help_text="Deprecated! Please use discounts instead. Describes the current discount applied to this "
         "subscription, if there is one. When billing, a discount applied to a "
         "subscription overrides a discount applied on a customer-wide basis.",
+    )
+    discounts = JSONField(
+        null=True,
+        blank=True,
+        help_text="The discounts applied to the invoice. Line item discounts are applied before invoice discounts.",
     )
     due_date = StripeDateTimeField(
         null=True,
@@ -551,7 +637,7 @@ class BaseInvoice(StripeModel):
         ),
     )
 
-    class Meta:
+    class Meta(StripeModel.Meta):
         abstract = True
         ordering = ["-created"]
 
@@ -686,11 +772,14 @@ class BaseInvoice(StripeModel):
             cls, data, api_key=api_key, pending_relations=pending_relations
         )
 
-        # InvoiceItems need a saved invoice because they're associated via a
+        # LineItems need a saved invoice because they're associated via a
         # RelatedManager, so this must be done as part of the post save hook.
-        cls._stripe_object_to_invoice_items(
-            target_cls=InvoiceItem, data=data, invoice=self, api_key=api_key
+        cls._stripe_object_to_line_items(
+            target_cls=LineItem, data=data, invoice=self, api_key=api_key
         )
+        # sync every discount
+        for discount in self.discounts:
+            Discount.sync_from_stripe_data(discount, api_key=api_key)
 
     @property
     def plan(self) -> Optional["Plan"]:
@@ -816,7 +905,8 @@ class UpcomingInvoice(BaseInvoice):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._invoiceitems = []
+
+        self._lineitems = []
         self._default_tax_rates = []
         self._total_tax_amounts = []
 
@@ -829,8 +919,9 @@ class UpcomingInvoice(BaseInvoice):
         super()._attach_objects_hook(
             cls, data, api_key=api_key, current_ids=current_ids
         )
-        self._invoiceitems = cls._stripe_object_to_invoice_items(
-            target_cls=InvoiceItem, data=data, invoice=self, api_key=api_key
+
+        self._lineitems = cls._stripe_object_to_line_items(
+            target_cls=LineItem, data=data, invoice=self, api_key=api_key
         )
 
     def _attach_objects_post_save_hook(
@@ -881,8 +972,28 @@ class UpcomingInvoice(BaseInvoice):
         return a mock of a queryset, but with the data fetched from Stripe - It
         will act like a normal queryset, but mutation will silently fail.
         """
+        # filter lineitems with type="invoice_item" and fetch all the actual InvoiceItem objects
+        items = []
+        for item in self._lineitems:
+            if item.type == "invoice_item":
+                items.append(item.invoice_item)
 
-        return QuerySetMock.from_iterable(InvoiceItem, self._invoiceitems)
+        return QuerySetMock.from_iterable(InvoiceItem, items)
+
+    @property
+    def lineitems(self):
+        """
+        Gets the line items associated with this upcoming invoice.
+
+        This differs from normal (non-upcoming) invoices, in that upcoming
+        invoices are in-memory and do not persist to the database. Therefore,
+        all of the data comes from the Stripe API itself.
+
+        Instead of returning a normal queryset for the lineitems, this will
+        return a mock of a queryset, but with the data fetched from Stripe - It
+        will act like a normal queryset, but mutation will silently fail.
+        """
+        return QuerySetMock.from_iterable(LineItem, self._lineitems)
 
     @property
     def default_tax_rates(self):
@@ -925,6 +1036,7 @@ class InvoiceItem(StripeModel):
     """
 
     stripe_class = stripe.InvoiceItem
+    expand_fields = ["discounts"]
 
     amount = StripeDecimalCurrencyAmountField(help_text="Amount invoiced (as decimal).")
     currency = StripeCurrencyCodeField()
@@ -940,7 +1052,11 @@ class InvoiceItem(StripeModel):
         help_text="If True, discounts will apply to this invoice item. "
         "Always False for prorations.",
     )
-    # TODO: discounts
+    discounts = JSONField(
+        null=True,
+        blank=True,
+        help_text="The discounts which apply to the invoice item. Item discounts are applied before invoice discounts.",
+    )
     invoice = StripeForeignKey(
         "Invoice",
         on_delete=models.CASCADE,
@@ -1043,12 +1159,12 @@ class InvoiceItem(StripeModel):
                 )
             )
 
+        # sync every discount
+        for discount in self.discounts:
+            Discount.sync_from_stripe_data(discount, api_key=api_key)
+
     def __str__(self):
         return self.description
-
-    @classmethod
-    def is_valid_object(cls, data):
-        return "object" in data and data["object"] in ("invoiceitem", "line_item")
 
     def get_stripe_dashboard_url(self):
         return self.invoice.get_stripe_dashboard_url()
@@ -1062,6 +1178,213 @@ class InvoiceItem(StripeModel):
             )
 
         return super().api_retrieve(*args, **kwargs)
+
+
+class LineItem(StripeModel):
+    """
+    The individual line items that make up the invoice.
+
+    Stripe documentation: https://stripe.com/docs/api/invoices/line_item
+    """
+
+    stripe_class = stripe.InvoiceLineItem
+    expand_fields = ["discounts"]
+
+    amount = StripeQuantumCurrencyAmountField(help_text="The amount, in cents.")
+    amount_excluding_tax = StripeQuantumCurrencyAmountField(
+        help_text="The integer amount in cents representing the amount for this line item, excluding all tax and discounts."
+    )
+    currency = StripeCurrencyCodeField()
+    discount_amounts = JSONField(
+        null=True,
+        blank=True,
+        help_text="The amount of discount calculated per discount for this line item.",
+    )
+    discountable = models.BooleanField(
+        default=False,
+        help_text="If True, discounts will apply to this line item. "
+        "Always False for prorations.",
+    )
+    discounts = JSONField(
+        null=True,
+        blank=True,
+        help_text="The discounts applied to the invoice line item. Line item discounts are applied before invoice discounts.",
+    )
+    invoice_item = StripeForeignKey(
+        "InvoiceItem",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The ID of the invoice item associated with this line item if any.",
+    )
+    period = JSONField(
+        help_text="The period this line_item covers. For subscription line items, this is the subscription period. For prorations, this starts when the proration was calculated, and ends at the period end of the subscription. For invoice items, this is the time at which the invoice item was created or the period of the item."
+    )
+    period_end = StripeDateTimeField(
+        help_text="The end of the period, which must be greater than or equal to the start."
+    )
+    period_start = StripeDateTimeField(help_text="The start of the period.")
+    price = JSONField(
+        help_text="The price of the line item.",
+    )
+    proration = models.BooleanField(
+        default=False,
+        help_text="Whether or not the invoice item was created automatically as a "
+        "proration adjustment when the customer switched plans.",
+    )
+    proration_details = JSONField(
+        help_text="Additional details for proration line items"
+    )
+    subscription = StripeForeignKey(
+        "Subscription",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The subscription that the invoice item pertains to, if any.",
+    )
+    subscription_item = StripeForeignKey(
+        "SubscriptionItem",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The subscription item that generated this invoice item. Left empty if the line item is not an explicit result of a subscription.",
+    )
+    tax_amounts = JSONField(
+        null=True,
+        blank=True,
+        help_text="The amount of tax calculated per tax rate for this line item",
+    )
+    tax_rates = JSONField(
+        null=True, blank=True, help_text="The tax rates which apply to the line item."
+    )
+    type = StripeEnumField(enum=enums.LineItem)
+    unit_amount_excluding_tax = StripeDecimalCurrencyAmountField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The amount in cents representing the unit amount for this line item, excluding all tax and discounts."
+        ),
+    )
+    quantity = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="The quantity of the subscription, if the line item is a subscription or a proration.",
+    )
+
+    @classmethod
+    def _manipulate_stripe_object_hook(cls, data):
+        data["period_start"] = data["period"]["start"]
+        data["period_end"] = data["period"]["end"]
+
+        return data
+
+    def _attach_objects_post_save_hook(
+        self,
+        cls,
+        data,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+        pending_relations=None,
+    ):
+        super()._attach_objects_post_save_hook(
+            cls, data, api_key=api_key, pending_relations=pending_relations
+        )
+
+        # sync every discount
+        for discount in self.discounts:
+            Discount.sync_from_stripe_data(discount, api_key=api_key)
+
+    @classmethod
+    def api_list(cls, api_key=djstripe_settings.STRIPE_SECRET_KEY, **kwargs):
+        """
+        Call the stripe API's list operation for this model.
+        Note that we only iterate and sync the LineItem associated with the
+        passed in Invoice.
+
+        Upcoming invoices are virtual and are not saved and hence their
+        line items are also not retrieved and synced
+
+        :param api_key: The api key to use for this request. \
+            Defaults to djstripe_settings.STRIPE_SECRET_KEY.
+        :type api_key: string
+
+        See Stripe documentation for accepted kwargs for each object.
+
+        :returns: an iterator over all items in the query
+        """
+        # get current invoice if any
+        invoice_id = kwargs.pop("id")
+
+        # get expand parameter that needs to be passed to invoice.lines.list call
+        expand_fields = kwargs.pop("expand")
+
+        invoice = Invoice.stripe_class.retrieve(invoice_id, api_key=api_key, **kwargs)
+
+        # iterate over all the line items on the current invoice
+        return invoice.lines.list(
+            api_key=api_key, expand=expand_fields, **kwargs
+        ).auto_paging_iter()
+
+
+class InvoiceOrLineItem(models.Model):
+    """An Internal Model that abstracts InvoiceItem and lineItem
+    objects
+
+    Contains two fields: `id` and `type`:
+    - `id` is the id of the Stripe object.
+    - `type` can be `line_item`, `invoice_item` or `unsupported`
+    """
+
+    id = models.CharField(max_length=255, primary_key=True)
+    type = StripeEnumField(
+        enum=enums.InvoiceorLineItemType,
+        help_text="Indicates whether the underlying model is LineItem or InvoiceItem. Can be one of: 'invoice_item', 'line_item' or 'unsupported'",
+    )
+
+    @classmethod
+    def _model_type(cls, id_):
+        if id_.startswith("ii"):
+            return InvoiceItem, "invoice_item"
+        elif id_.startswith("il"):
+            return LineItem, "line_item"
+        raise ValueError(f"Unknown object type with id: {id_}")
+
+    @classmethod
+    def _get_or_create_from_stripe_object(
+        cls,
+        data,
+        field_name="id",
+        refetch=True,
+        current_ids=None,
+        pending_relations=None,
+        save=True,
+        stripe_account=None,
+        api_key=djstripe_settings.STRIPE_SECRET_KEY,
+    ):
+
+        raw_field_data = data.get(field_name)
+        id_ = get_id_from_stripe_data(raw_field_data)
+
+        try:
+            object_cls, object_type = cls._model_type(id_)
+        except ValueError:
+            # This may happen if we have object types we don't know about.
+            # Let's not make dj-stripe entirely unusable if that happens.
+            logger.warning(f"Unknown Object. Could not sync object with id: {id_}")
+            return cls.objects.get_or_create(id=id_, defaults={"type": "unsupported"})
+
+        # call model's _get_or_create_from_stripe_object to ensure
+        # that object exists before getting or creating its InvoiceorLineItem mapping
+        object_cls._get_or_create_from_stripe_object(
+            data,
+            field_name,
+            refetch=refetch,
+            current_ids=current_ids,
+            pending_relations=pending_relations,
+            stripe_account=stripe_account,
+            api_key=api_key,
+        )
+
+        return cls.objects.get_or_create(id=id_, defaults={"type": object_type})
 
 
 class Plan(StripeModel):
@@ -1415,7 +1738,11 @@ class Subscription(StripeModel):
         "that does not have tax_rates set. Invoices created will have their "
         "default_tax_rates populated from the subscription.",
     )
-    discount = JSONField(null=True, blank=True)
+    discount = JSONField(
+        null=True,
+        blank=True,
+        help_text="Describes the current discount applied to this subscription, if there is one. When billing, a discount applied to a subscription overrides a discount applied on a customer-wide basis.",
+    )
     ended_at = StripeDateTimeField(
         null=True,
         blank=True,
@@ -2059,7 +2386,7 @@ class ShippingRate(StripeModel):
         help_text="The shipping tax code",
     )
 
-    class Meta:
+    class Meta(StripeModel.Meta):
         verbose_name = "Shipping Rate"
 
     def __str__(self):
@@ -2090,7 +2417,7 @@ class TaxCode(StripeModel):
         help_text="A short name for the tax code.",
     )
 
-    class Meta:
+    class Meta(StripeModel.Meta):
         verbose_name = "Tax Code"
 
     def __str__(self):
@@ -2126,9 +2453,8 @@ class TaxId(StripeModel):
     def __str__(self):
         return f"{enums.TaxIdType.humanize(self.type)} {self.value} ({self.verification.get('status')})"
 
-    class Meta:
+    class Meta(StripeModel.Meta):
         verbose_name = "Tax ID"
-        verbose_name_plural = "Tax IDs"
 
     @classmethod
     def _api_create(cls, api_key=djstripe_settings.STRIPE_SECRET_KEY, **kwargs):
@@ -2249,9 +2575,8 @@ class TaxRate(StripeModel):
     def __str__(self):
         return f"{self.display_name} at {self.percentage}%"
 
-    class Meta:
-        verbose_name = "Tax Rates"
-        verbose_name_plural = "Tax Rates"
+    class Meta(StripeModel.Meta):
+        verbose_name = "Tax Rate"
 
 
 class UsageRecord(StripeModel):

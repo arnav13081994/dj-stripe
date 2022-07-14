@@ -662,24 +662,12 @@ class Customer(StripeModel):
         blank=True,
         help_text="Whether the Customer instance has been deleted upstream in Stripe or not.",
     )
-    # <discount>
-    coupon = models.ForeignKey(
-        "Coupon", null=True, blank=True, on_delete=models.SET_NULL
-    )
-    coupon_start = StripeDateTimeField(
+    discount = JSONField(
         null=True,
         blank=True,
-        editable=False,
-        help_text="If a coupon is present, the date at which it was applied.",
+        help_text="Describes the current discount active on the customer, if there is one.",
     )
-    coupon_end = StripeDateTimeField(
-        null=True,
-        blank=True,
-        editable=False,
-        help_text="If a coupon is present and has a limited duration, "
-        "the date that the discount will end.",
-    )
-    # </discount>
+
     email = models.TextField(max_length=5000, default="", blank=True)
     invoice_prefix = models.CharField(
         default="",
@@ -744,7 +732,7 @@ class Customer(StripeModel):
     )
     date_purged = models.DateTimeField(null=True, editable=False)
 
-    class Meta:
+    class Meta(StripeModel.Meta):
         unique_together = ("subscriber", "livemode", "djstripe_owner_account")
 
     def __str__(self):
@@ -765,11 +753,6 @@ class Customer(StripeModel):
         else:
             # set "deleted" key to False (default)
             data["deleted"] = False
-
-        discount = data.get("discount")
-        if discount:
-            data["coupon_start"] = discount["start"]
-            data["coupon_end"] = discount["end"]
 
         # Populate the object id for our default_payment_method field (or set it None)
         data["default_payment_method"] = data.get("invoice_settings", {}).get(
@@ -1254,17 +1237,12 @@ class Customer(StripeModel):
         )
         return self.default_source is not None
 
-    def add_coupon(self, coupon, idempotency_key=None):
+    def add_discount(self, discount: dict, idempotency_key=None):
         """
-        Add a coupon to a Customer.
-
-        The coupon can be a Coupon object, or a valid Stripe Coupon ID.
+        Add a Discount to a Customer.
         """
-        if isinstance(coupon, StripeModel):
-            coupon = coupon.id
-
         stripe_customer = self.api_retrieve()
-        stripe_customer["coupon"] = coupon
+        stripe_customer["discount"] = discount
         stripe_customer.save(idempotency_key=idempotency_key)
         return self.__class__.sync_from_stripe_data(
             stripe_customer, api_key=self.default_api_key
@@ -1290,7 +1268,6 @@ class Customer(StripeModel):
         pending_relations=None,
         api_key=djstripe_settings.STRIPE_SECRET_KEY,
     ):  # noqa (function complexity)
-        from .billing import Coupon
         from .payment_methods import DjstripePaymentMethod
 
         super()._attach_objects_post_save_hook(
@@ -1310,18 +1287,6 @@ class Customer(StripeModel):
                     source, source["object"], api_key=api_key
                 )
                 sources[source["id"]] = obj
-
-        discount = data.get("discount")
-        if discount:
-            coupon, _created = Coupon._get_or_create_from_stripe_object(
-                discount, "coupon", api_key=api_key
-            )
-            if coupon and coupon != self.coupon:
-                self.coupon = coupon
-                save = True
-        elif self.coupon:
-            self.coupon = None
-            save = True
 
         if save:
             self.save()

@@ -8,7 +8,6 @@ import stripe
 from django.apps import apps
 from django.contrib import messages
 from django.contrib.admin import helpers, site
-from django.contrib.auth.models import AnonymousUser
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test.client import RequestFactory
@@ -23,10 +22,13 @@ from tests import (
     FAKE_CHARGE,
     FAKE_CUSTOMER,
     FAKE_INVOICE,
+    FAKE_INVOICEITEM,
+    FAKE_LINE_ITEM,
     FAKE_PAYMENT_INTENT_I,
     FAKE_PLAN,
     FAKE_PRODUCT,
     FAKE_SUBSCRIPTION,
+    FAKE_SUBSCRIPTION_ITEM,
     FAKE_SUBSCRIPTION_SCHEDULE,
 )
 
@@ -76,7 +78,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().get(change_url)
         # add the admin user to the mocked request
@@ -93,63 +95,6 @@ class TestConfirmCustomActionView:
         form_kwargs = view.get_form_kwargs()
         assert form_kwargs.get("model_name") == model.__name__.lower()
         assert form_kwargs.get("action_name") == action_name
-
-    @pytest.mark.parametrize(
-        "action_name",
-        [
-            "_resync_instances",
-            "_sync_all_instances",
-            "_cancel",
-            "_release_subscription_schedule",
-            "_cancel_subscription_schedule",
-        ],
-    )
-    @pytest.mark.parametrize("is_admin_user", [True, False])
-    def test_dispatch(self, is_admin_user, action_name, admin_user, monkeypatch):
-
-        model = TestCustomActionModel
-
-        # monkeypatch utils.get_model
-        def mock_get_model(*args, **kwargs):
-            return model
-
-        monkeypatch.setattr(utils, "get_model", mock_get_model)
-
-        kwargs = {
-            "action_name": action_name,
-            "model_name": model.__name__.lower(),
-        }
-
-        # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
-
-        request = RequestFactory().get(change_url)
-
-        if is_admin_user:
-            # add the admin user to the mocked request
-            request.user = admin_user
-        else:
-            # add the AnonymousUser to the mocked request
-            request.user = AnonymousUser()
-
-        # Add the session/message middleware to the request
-        SessionMiddleware(self.dummy_get_response).process_request(request)
-        MessageMiddleware(self.dummy_get_response).process_request(request)
-
-        view = ConfirmCustomAction()
-        view.setup(request, **kwargs)
-
-        # Invoke the dispatch method
-        response = view.dispatch(request)
-
-        if is_admin_user:
-            assert response.status_code == 200
-        else:
-            assert response.status_code == 302
-            assert (
-                response.url
-                == f"/admin/login/?next=/djstripe/action/{action_name}/testcustomactionmodel/"
-            )
 
     @pytest.mark.parametrize(
         "action_name",
@@ -193,7 +138,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -263,7 +208,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -320,7 +265,7 @@ class TestConfirmCustomActionView:
 
                 # get the custom action POST url
                 change_url = reverse(
-                    "djstripe:djstripe_custom_action",
+                    "admin:djstripe_custom_action",
                     kwargs=kwargs,
                 )
 
@@ -390,7 +335,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -453,7 +398,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -502,7 +447,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -526,6 +471,12 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -537,6 +488,9 @@ class TestConfirmCustomActionView:
 
         def mock_payment_intent_get(*args, **kwargs):
             return FAKE_PAYMENT_INTENT_I
+
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
 
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
@@ -553,11 +507,18 @@ class TestConfirmCustomActionView:
         # monkeypatch stripe retrieve calls to return
         # the desired json response.
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
         monkeypatch.setattr(
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
+        # si_HXZCDv9ixoUB5u
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
         monkeypatch.setattr(stripe.PaymentIntent, "retrieve", mock_payment_intent_get)
@@ -586,7 +547,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -618,6 +579,12 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -629,6 +596,9 @@ class TestConfirmCustomActionView:
 
         def mock_payment_intent_get(*args, **kwargs):
             return FAKE_PAYMENT_INTENT_I
+
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
 
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
@@ -645,11 +615,17 @@ class TestConfirmCustomActionView:
         # monkeypatch stripe retrieve calls to return
         # the desired json response.
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
         monkeypatch.setattr(
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
         monkeypatch.setattr(stripe.PaymentIntent, "retrieve", mock_payment_intent_get)
@@ -678,7 +654,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -700,6 +676,9 @@ class TestConfirmCustomActionView:
         def mock_balance_transaction_get(*args, **kwargs):
             return FAKE_BALANCE_TRANSACTION
 
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
+
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
 
@@ -718,6 +697,12 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -730,6 +715,9 @@ class TestConfirmCustomActionView:
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
@@ -737,6 +725,9 @@ class TestConfirmCustomActionView:
         monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
 
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
 
         monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)
@@ -765,7 +756,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -797,6 +788,9 @@ class TestConfirmCustomActionView:
         def mock_balance_transaction_get(*args, **kwargs):
             return FAKE_BALANCE_TRANSACTION
 
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
+
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
 
@@ -815,6 +809,12 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -827,6 +827,9 @@ class TestConfirmCustomActionView:
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
@@ -834,6 +837,9 @@ class TestConfirmCustomActionView:
         monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
 
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
 
         monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)
@@ -862,7 +868,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -894,6 +900,9 @@ class TestConfirmCustomActionView:
         def mock_balance_transaction_get(*args, **kwargs):
             return FAKE_BALANCE_TRANSACTION
 
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
+
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
 
@@ -912,6 +921,12 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -924,6 +939,9 @@ class TestConfirmCustomActionView:
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
@@ -931,6 +949,9 @@ class TestConfirmCustomActionView:
         monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
 
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
 
         monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)
@@ -959,7 +980,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
@@ -981,6 +1002,9 @@ class TestConfirmCustomActionView:
         def mock_balance_transaction_get(*args, **kwargs):
             return FAKE_BALANCE_TRANSACTION
 
+        def mock_subscriptionitem_get(*args, **kwargs):
+            return FAKE_SUBSCRIPTION_ITEM
+
         def mock_subscription_get(*args, **kwargs):
             return FAKE_SUBSCRIPTION
 
@@ -999,6 +1023,12 @@ class TestConfirmCustomActionView:
         def mock_invoice_get(*args, **kwargs):
             return FAKE_INVOICE
 
+        def mock_invoice_item_get(*args, **kwargs):
+            return FAKE_INVOICEITEM
+
+        def mock_line_item_get(*args, **kwargs):
+            return FAKE_LINE_ITEM
+
         def mock_customer_get(*args, **kwargs):
             return FAKE_CUSTOMER
 
@@ -1011,6 +1041,9 @@ class TestConfirmCustomActionView:
             stripe.BalanceTransaction, "retrieve", mock_balance_transaction_get
         )
         monkeypatch.setattr(stripe.Subscription, "retrieve", mock_subscription_get)
+        monkeypatch.setattr(
+            stripe.SubscriptionItem, "retrieve", mock_subscriptionitem_get
+        )
         monkeypatch.setattr(stripe.Charge, "retrieve", mock_charge_get)
 
         monkeypatch.setattr(stripe.PaymentMethod, "retrieve", mock_payment_method_get)
@@ -1018,6 +1051,9 @@ class TestConfirmCustomActionView:
         monkeypatch.setattr(stripe.Product, "retrieve", mock_product_get)
 
         monkeypatch.setattr(stripe.Invoice, "retrieve", mock_invoice_get)
+        monkeypatch.setattr(stripe.InvoiceItem, "retrieve", mock_invoice_item_get)
+        monkeypatch.setattr(stripe.LineItem, "retrieve", mock_line_item_get)
+
         monkeypatch.setattr(stripe.Customer, "retrieve", mock_customer_get)
 
         monkeypatch.setattr(stripe.Plan, "retrieve", mock_plan_get)
@@ -1046,7 +1082,7 @@ class TestConfirmCustomActionView:
         }
 
         # get the custom action POST url
-        change_url = reverse("djstripe:djstripe_custom_action", kwargs=kwargs)
+        change_url = reverse("admin:djstripe_custom_action", kwargs=kwargs)
 
         request = RequestFactory().post(change_url, data=data, follow=True)
 
