@@ -1449,6 +1449,7 @@ FAKE_INVOICE_II = InvoiceDict(
         "created": 1439785128,
         "description": None,
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": 0,
         "lines": {
@@ -1495,6 +1496,7 @@ FAKE_INVOICE_III = InvoiceDict(
         "customer": "cus_6lsBvm5rJ0zyHc",
         "description": None,
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": 20,
         "lines": {
@@ -1560,6 +1562,7 @@ FAKE_INVOICE_METERED_SUBSCRIPTION = InvoiceDict(
         "object": "invoice",
         "charge": None,
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": 0,
         "lines": {
@@ -1618,6 +1621,7 @@ FAKE_UPCOMING_INVOICE = InvoiceDict(
             }
         ],
         "discount": None,
+        "discounts": [],
         "due_date": None,
         "ending_balance": None,
         "lines": {
