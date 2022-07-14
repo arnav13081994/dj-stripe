@@ -49,6 +49,12 @@ class PaymentMethodForeignKey(models.ForeignKey):
         super().__init__(**kwargs)
 
 
+class InvoiceOrLineItemForeignKey(models.ForeignKey):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("to", "InvoiceOrLineItem")
+        super().__init__(**kwargs)
+
+
 class StripePercentField(models.DecimalField):
     """A field used to define a percent according to djstripe logic."""
 
