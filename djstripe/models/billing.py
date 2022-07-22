@@ -168,9 +168,6 @@ class Coupon(StripeModel):
     class Meta(StripeModel.Meta):
         unique_together = ("id", "livemode")
 
-    stripe_class = stripe.Coupon
-    stripe_dashboard_item_name = "coupons"
-
     def __str__(self):
         if self.name:
             return self.name
@@ -1415,7 +1412,11 @@ class Subscription(StripeModel):
         "that does not have tax_rates set. Invoices created will have their "
         "default_tax_rates populated from the subscription.",
     )
-    discount = JSONField(null=True, blank=True)
+    discount = JSONField(
+        null=True,
+        blank=True,
+        help_text="Describes the current discount applied to this subscription, if there is one. When billing, a discount applied to a subscription overrides a discount applied on a customer-wide basis.",
+    )
     ended_at = StripeDateTimeField(
         null=True,
         blank=True,
@@ -2095,6 +2096,11 @@ class TaxCode(StripeModel):
 
     def __str__(self):
         return f"{self.name}: {self.id}"
+
+    @classmethod
+    def _find_owner_account(cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY):
+        # Tax Codes do not belong to any Stripe Account
+        pass
 
 
 class TaxId(StripeModel):
