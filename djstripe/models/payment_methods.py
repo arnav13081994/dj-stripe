@@ -260,6 +260,12 @@ class LegacySourceMixin:
                 .auto_paging_iter()
             )
 
+        raise NotImplementedError(
+            f"Can't list {cls.stripe_class.OBJECT_NAME} without a customer or account object."
+            " This may happen if not all accounts or customer objects are in the db."
+            ' Please run "python manage.py djstripe_sync_models Account Customer" as a potential fix.'
+        )
+
     def get_stripe_dashboard_url(self) -> str:
         if self.customer:
             return self.customer.get_stripe_dashboard_url()
@@ -314,6 +320,12 @@ class LegacySourceMixin:
                 api_key=api_key,
             )
 
+        raise NotImplementedError(
+            f"Can't retrieve {self.__class__} without a customer or account object."
+            " This may happen if not all accounts or customer objects are in the db."
+            ' Please run "python manage.py djstripe_sync_models Account Customer" as a potential fix.'
+        )
+
     def _api_delete(self, api_key=None, stripe_account=None, **kwargs):
         # OVERRIDING the parent version of this function
         # Cards & Banks Accounts must be manipulated through a customer or account.
@@ -341,8 +353,22 @@ class LegacySourceMixin:
                 **kwargs,
             )
 
+        raise NotImplementedError(
+            f"Can't delete {self.__class__} without a customer or account object."
+            " This may happen if not all accounts or customer objects are in the db."
+            ' Please run "python manage.py djstripe_sync_models Account Customer" as a potential fix.'
+        )
+
 
 class BankAccount(LegacySourceMixin, StripeModel):
+    """
+    These bank accounts are payment methods on Customer objects.
+    On the other hand External Accounts are transfer destinations on Account
+    objects for Custom accounts. They can be bank accounts or debit cards as well.
+
+    Stripe documentation:https://stripe.com/docs/api/customer_bank_accounts
+    """
+
     stripe_class = stripe.BankAccount
 
     account = StripeForeignKey(
@@ -426,7 +452,10 @@ class BankAccount(LegacySourceMixin, StripeModel):
         if not self.customer and not self.account:
             raise NotImplementedError(
                 "Can't retrieve a bank account without a customer or account object."
+                " This may happen if not all accounts or customer objects are in the db."
+                ' Please run "python manage.py djstripe_sync_models Account Customer" as a potential fix.'
             )
+
         return super().api_retrieve(**kwargs)
 
 
@@ -606,7 +635,12 @@ class Card(LegacySourceMixin, StripeModel):
 
 class Source(StripeModel):
     """
-    Stripe documentation: https://stripe.com/docs/api#sources
+    Source objects allow you to accept a variety of payment methods.
+    They represent a customer's payment instrument, and can be used with
+    the Stripe API just like a Card object: once chargeable,
+    they can be charged, or can be attached to customers.
+
+    Stripe documentation: https://stripe.com/docs/api?lang=python#sources
     """
 
     amount = StripeDecimalCurrencyAmountField(
@@ -758,7 +792,11 @@ class Source(StripeModel):
 
 class PaymentMethod(StripeModel):
     """
-    Stripe documentation: https://stripe.com/docs/api#payment_methods
+    PaymentMethod objects represent your customer's payment instruments.
+    You can use them with PaymentIntents to collect payments or save them
+    to Customer objects to store instrument details for future payments.
+
+    Stripe documentation: https://stripe.com/docs/api?lang=python#payment_methods
     """
 
     stripe_class = stripe.PaymentMethod
