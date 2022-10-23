@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Dj-Stripe Team" /><link rel="canonical" href="https://dj-stripe.github.io/dj-stripe/master/usage/creating_individual_charges/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Dj-Stripe Team" /><link rel="canonical" href="https://dj-stripe.github.io/dj-stripe/2.7/usage/creating_individual_charges/" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
     <title>Creating individual charges - Dj-Stripe</title>
     <link rel="stylesheet" href="../../css/theme.css" />
@@ -16,7 +16,7 @@
         // Current page data
         var mkdocs_page_name = "Creating individual charges";
         var mkdocs_page_input_path = "usage/creating_individual_charges.md";
-        var mkdocs_page_url = "/dj-stripe/master/usage/creating_individual_charges/";
+        var mkdocs_page_url = "/dj-stripe/2.7/usage/creating_individual_charges/";
       </script>
     
     <script src="../../js/jquery-3.6.0.min.js" defer></script>
@@ -148,8 +148,7 @@
           <li>Usage &raquo;</li>
       <li>Creating individual charges</li>
     <li class="wy-breadcrumbs-aside">
-        <a href="https://github.com/dj-stripe/dj-stripe/edit/master/docs/usage/creating_individual_charges.md"
-          class="icon icon-github"> Edit on GitHub</a>
+          <a href="https://github.com/dj-stripe/dj-stripe/edit/master/docs/usage/creating_individual_charges.md" class="icon icon-github"> Edit on GitHub</a>
     </li>
   </ul>
   <hr/>
@@ -158,7 +157,7 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="creating-individual-charges">Creating individual charges</h1>
-<p>On the subscriber's customer object, use the <a href="../../reference/project/#djstripe.models.core.Customer.charge"><code>charge</code></a> method to generate a
+<p>On the subscriber's customer object, use the <a class="autorefs autorefs-internal" href="../../reference/models/#djstripe.models.core.Customer.charge"><code>charge</code></a> method to generate a
 Stripe charge. In this example, we're using the user named <code>admin</code> as the
 subscriber.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>

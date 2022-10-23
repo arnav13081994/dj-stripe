@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Dj-Stripe Team" /><link rel="canonical" href="https://dj-stripe.github.io/dj-stripe/master/api_versions/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Dj-Stripe Team" /><link rel="canonical" href="https://dj-stripe.github.io/dj-stripe/2.7/api_versions/" />
       <link rel="shortcut icon" href="../img/favicon.ico" />
     <title>A note on Stripe API Versions - Dj-Stripe</title>
     <link rel="stylesheet" href="../css/theme.css" />
@@ -16,7 +16,7 @@
         // Current page data
         var mkdocs_page_name = "A note on Stripe API Versions";
         var mkdocs_page_input_path = "api_versions.md";
-        var mkdocs_page_url = "/dj-stripe/master/api_versions/";
+        var mkdocs_page_url = "/dj-stripe/2.7/api_versions/";
       </script>
     
     <script src="../js/jquery-3.6.0.min.js" defer></script>
@@ -156,8 +156,7 @@
           <li>Getting Started &raquo;</li>
       <li>A note on Stripe API Versions</li>
     <li class="wy-breadcrumbs-aside">
-        <a href="https://github.com/dj-stripe/dj-stripe/edit/master/docs/api_versions.md"
-          class="icon icon-github"> Edit on GitHub</a>
+          <a href="https://github.com/dj-stripe/dj-stripe/edit/master/docs/api_versions.md" class="icon icon-github"> Edit on GitHub</a>
     </li>
   </ul>
   <hr/>
@@ -202,7 +201,7 @@ appropriate testing.</p>
 version of Stripe's API</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>Checkout <a href="https://stripe.com/blog/api-versioning">Stripe API Versioning</a> </p>
+<p>Checkout <a href="https://stripe.com/blog/api-versioning">Stripe API Versioning</a></p>
 </div>
 <h2 id="dj-stripe-api-version">Dj-stripe API version</h2>
 <p>This is the Stripe API version used by dj-stripe in all communication
@@ -210,8 +209,8 @@ with Stripe, including when processing webhooks (though webhook data is
 sent to you by Stripe with your API version, we re-fetch the data with
 dj-stripe's API version), this is because the API schema needs to match
 dj-stripe's Django model schema.</p>
-<p>This is defined by <a href="../reference/settings/#djstripe.settings.DjstripeSettings.DEFAULT_STRIPE_API_VERSION"><code>djstripe.settings.djstripe_settings.DEFAULT_STRIPE_API_VERSION</code></a> and
-can be overridden by the function, <a href="../reference/settings/#djstripe.settings.DjstripeSettings.set_stripe_api_version"><code>djstripe.settings.djstripe_settings.set_stripe_api_version</code></a>, though see the warning
+<p>This is defined by <a class="autorefs autorefs-internal" href="../reference/settings/#djstripe.settings.DjstripeSettings.DEFAULT_STRIPE_API_VERSION"><code>djstripe.settings.djstripe_settings.DEFAULT_STRIPE_API_VERSION</code></a> and
+can be overridden by the function, <a class="autorefs autorefs-internal" href="../reference/settings/#djstripe.settings.DjstripeSettings.set_stripe_api_version"><code>djstripe.settings.djstripe_settings.set_stripe_api_version</code></a>, though see the warning
 about doing this.</p>
 <h2 id="dj-stripe-latest-tested-version">Dj-stripe Latest Tested Version</h2>
 <p>This is the most recent Stripe account API version used by the

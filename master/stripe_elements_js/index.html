@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Dj-Stripe Team" /><link rel="canonical" href="https://dj-stripe.github.io/dj-stripe/master/stripe_elements_js/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="author" content="Dj-Stripe Team" /><link rel="canonical" href="https://dj-stripe.github.io/dj-stripe/2.7/stripe_elements_js/" />
       <link rel="shortcut icon" href="../img/favicon.ico" />
     <title>Integrating Stripe Elements - Dj-Stripe</title>
     <link rel="stylesheet" href="../css/theme.css" />
@@ -16,7 +16,7 @@
         // Current page data
         var mkdocs_page_name = "Integrating Stripe Elements";
         var mkdocs_page_input_path = "stripe_elements_js.md";
-        var mkdocs_page_url = "/dj-stripe/master/stripe_elements_js/";
+        var mkdocs_page_url = "/dj-stripe/2.7/stripe_elements_js/";
       </script>
     
     <script src="../js/jquery-3.6.0.min.js" defer></script>
@@ -158,8 +158,7 @@
           <li>Getting Started &raquo;</li>
       <li>Integrating Stripe Elements</li>
     <li class="wy-breadcrumbs-aside">
-        <a href="https://github.com/dj-stripe/dj-stripe/edit/master/docs/stripe_elements_js.md"
-          class="icon icon-github"> Edit on GitHub</a>
+          <a href="https://github.com/dj-stripe/dj-stripe/edit/master/docs/stripe_elements_js.md" class="icon icon-github"> Edit on GitHub</a>
     </li>
   </ul>
   <hr/>
@@ -186,7 +185,7 @@ Elements with stripe js v3.</p>
 compliance (3D secure etc).</p>
 <h3 id="charges-using-stripecreatesource"><a href="https://stripe.com/docs/js/tokens_sources/create_source">Charges using stripe.createSource()</a></h3>
 <p>This creates Source objects within Stripe, and can be used for various different methods of payment (including, but not limited to cards), but isn't SCA compliant.</p>
-<p>The <a href="https://stripe.com/docs/payments/accept-a-payment-charges?platform=web">Card Elements Quickstart JS</a> example can be used, except use <code>stripe.createSource</code> instead of <code>stripe.createToken</code> and the <code>result.source</code> instead of <code>result.token</code>. <a href="../reference/project/#tests.apps.example.views.PurchaseSubscriptionView"><code>Checkout a working example of this</code></a></p>
+<p>The <a href="https://stripe.com/docs/payments/accept-a-payment-charges?platform=web">Card Elements Quickstart JS</a> example can be used, except use <code>stripe.createSource</code> instead of <code>stripe.createToken</code> and the <code>result.source</code> instead of <code>result.token</code>. [<code>Checkout a working example of this</code>][tests.apps.example.views.PurchaseSubscriptionView]</p>
 <h3 id="charges-using-stripecreatetoken">Charges using stripe.createToken()</h3>
 <p>This predates <code>stripe.createSource</code>, and creates legacy Card objects within Stripe, which have some compatibility issues with Payment Methods.</p>
 <p>If you're using <code>stripe.createToken</code>, see if you can upgrade to
