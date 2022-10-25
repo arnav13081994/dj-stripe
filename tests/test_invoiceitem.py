@@ -35,9 +35,10 @@ from . import (
     FAKE_TAX_RATE_EXAMPLE_1_VAT,
     AssertStripeFksMixin,
 )
+from .conftest import CreateAccountMixin
 
 
-class InvoiceItemTest(AssertStripeFksMixin, TestCase):
+class InvoiceItemTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     def setUp(self):
         # create a Stripe Platform Account
         self.account = FAKE_PLATFORM_ACCOUNT.create()

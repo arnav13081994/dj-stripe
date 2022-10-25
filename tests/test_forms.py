@@ -15,6 +15,8 @@ from .test_apikey import RK_LIVE, RK_TEST, SK_LIVE, SK_TEST
 
 pytestmark = pytest.mark.django_db
 
+from .conftest import CreateAccountMixin
+
 
 class TestCustomActionForm:
     @pytest.mark.parametrize(
@@ -55,7 +57,7 @@ class TestCustomActionForm:
             assert _selected_action_field.choices == list(zip(pk_values, pk_values))
 
 
-class TestAPIKeyAdminCreateForm:
+class TestAPIKeyAdminCreateForm(CreateAccountMixin):
     @pytest.mark.parametrize("secret", [SK_TEST, SK_LIVE, RK_TEST, RK_LIVE])
     def test__post_clean(self, secret, monkeypatch):
 

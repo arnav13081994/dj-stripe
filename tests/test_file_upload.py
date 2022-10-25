@@ -13,9 +13,10 @@ from djstripe.models import Account, File
 from . import FAKE_ACCOUNT, FAKE_FILEUPLOAD_ICON, FAKE_FILEUPLOAD_LOGO
 
 pytestmark = pytest.mark.django_db
+from .conftest import CreateAccountMixin
 
 
-class TestFileLink(TestCase):
+class TestFileLink(CreateAccountMixin, TestCase):
     @patch(
         target="stripe.File.retrieve",
         autospec=True,
@@ -62,7 +63,7 @@ class TestFileLink(TestCase):
         assert file.type == FAKE_FILEUPLOAD_ICON["type"]
 
 
-class TestFileUploadStr:
+class TestFileUploadStr(CreateAccountMixin):
     @pytest.mark.parametrize("file_purpose", FilePurpose.__members__)
     def test___str__(self, file_purpose):
         modified_file_data = deepcopy(FAKE_FILEUPLOAD_ICON)

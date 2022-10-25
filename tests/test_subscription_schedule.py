@@ -26,9 +26,10 @@ from . import (
     AssertStripeFksMixin,
     datetime_to_unix,
 )
+from .conftest import CreateAccountMixin
 
 
-class SubscriptionScheduleTest(AssertStripeFksMixin, TestCase):
+class SubscriptionScheduleTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     @patch(
         "stripe.BalanceTransaction.retrieve",
         return_value=deepcopy(FAKE_BALANCE_TRANSACTION),

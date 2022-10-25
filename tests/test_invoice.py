@@ -35,8 +35,10 @@ from . import (
 
 pytestmark = pytest.mark.django_db
 
+from .conftest import CreateAccountMixin
 
-class InvoiceTest(AssertStripeFksMixin, TestCase):
+
+class InvoiceTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     def setUp(self):
         # create a Stripe Platform Account
         self.account = FAKE_PLATFORM_ACCOUNT.create()
@@ -1356,7 +1358,7 @@ class InvoiceTest(AssertStripeFksMixin, TestCase):
             Invoice.upcoming()
 
 
-class TestInvoiceDecimal:
+class TestInvoiceDecimal(CreateAccountMixin):
     @pytest.mark.parametrize(
         "inputted,expected",
         [

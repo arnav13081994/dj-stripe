@@ -23,8 +23,10 @@ from . import (
 
 pytestmark = pytest.mark.django_db
 
+from .conftest import CreateAccountMixin
 
-class PriceCreateTest(AssertStripeFksMixin, TestCase):
+
+class PriceCreateTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     def setUp(self):
 
         with patch(
@@ -116,7 +118,7 @@ class PriceCreateTest(AssertStripeFksMixin, TestCase):
         self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
 
 
-class PriceTest(AssertStripeFksMixin, TestCase):
+class PriceTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     def setUp(self):
 
         self.price_data = deepcopy(FAKE_PRICE)
@@ -174,7 +176,7 @@ class PriceTest(AssertStripeFksMixin, TestCase):
         self.assert_fks(price, expected_blank_fks={"djstripe.Customer.coupon"})
 
 
-class TestStrPrice:
+class TestStrPrice(CreateAccountMixin):
     @pytest.mark.parametrize(
         "fake_price_data",
         [
@@ -209,7 +211,7 @@ class TestStrPrice:
             )
 
 
-class TestHumanReadablePrice:
+class TestHumanReadablePrice(CreateAccountMixin):
 
     #
     # Helpers

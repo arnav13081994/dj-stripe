@@ -46,6 +46,7 @@ from . import (
     AssertStripeFksMixin,
     datetime_to_unix,
 )
+from .conftest import CreateAccountMixin
 
 pytestmark = pytest.mark.django_db
 
@@ -53,7 +54,7 @@ pytestmark = pytest.mark.django_db
 # with Prices is fully supported
 
 
-class SubscriptionStrTest(TestCase):
+class SubscriptionStrTest(CreateAccountMixin, TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
             username="pydanny", email="pydanny@gmail.com"
@@ -124,7 +125,7 @@ class SubscriptionStrTest(TestCase):
         )
 
 
-class SubscriptionTest(AssertStripeFksMixin, TestCase):
+class SubscriptionTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     @patch(
         "stripe.BalanceTransaction.retrieve",
         return_value=deepcopy(FAKE_BALANCE_TRANSACTION),
@@ -1174,7 +1175,7 @@ class SubscriptionTest(AssertStripeFksMixin, TestCase):
         )
 
 
-class TestSubscriptionDecimal:
+class TestSubscriptionDecimal(CreateAccountMixin):
     @pytest.mark.parametrize(
         "inputted,expected",
         [

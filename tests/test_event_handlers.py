@@ -5,7 +5,6 @@ from copy import deepcopy
 from decimal import Decimal
 from unittest.mock import ANY, call, patch
 
-import pytest
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from stripe.error import InvalidRequestError
@@ -151,6 +150,7 @@ from . import (
     FAKE_TRANSFER,
     AssertStripeFksMixin,
 )
+from .conftest import CreateAccountMixin
 
 
 class EventTestCase(TestCase):
@@ -171,7 +171,7 @@ class EventTestCase(TestCase):
         return event
 
 
-class TestAccountEvents(EventTestCase):
+class TestAccountEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
         # create a Custom Stripe Account
         self.custom_account = FAKE_CUSTOM_ACCOUNT.create()
@@ -698,7 +698,7 @@ class TestAccountEvents(EventTestCase):
         )
 
 
-class TestChargeEvents(EventTestCase):
+class TestChargeEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
         # create a Stripe Platform Account
         self.account = FAKE_PLATFORM_ACCOUNT.create()
@@ -767,7 +767,7 @@ class TestChargeEvents(EventTestCase):
         self.assertEqual(charge.status, fake_stripe_event["data"]["object"]["status"])
 
 
-class TestCheckoutEvents(EventTestCase):
+class TestCheckoutEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -1022,7 +1022,7 @@ class TestCheckoutEvents(EventTestCase):
         self.assertEqual(self.customer.metadata, {"djstripe_subscriber": self.user.id})
 
 
-class TestCustomerEvents(EventTestCase):
+class TestCustomerEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -1362,7 +1362,7 @@ class TestCustomerEvents(EventTestCase):
         event.invoke_webhook_handlers()
 
 
-class TestDisputeEvents(EventTestCase):
+class TestDisputeEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -1685,7 +1685,7 @@ class TestDisputeEvents(EventTestCase):
         self.assertEqual(dispute.id, FAKE_DISPUTE_V_PARTIAL["id"])
 
 
-class TestFileEvents(EventTestCase):
+class TestFileEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -1711,7 +1711,7 @@ class TestFileEvents(EventTestCase):
         self.assertEqual(file.id, FAKE_FILEUPLOAD_ICON["id"])
 
 
-class TestInvoiceEvents(EventTestCase):
+class TestInvoiceEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -1909,7 +1909,7 @@ class TestInvoiceEvents(EventTestCase):
         event.invoke_webhook_handlers()
 
 
-class TestInvoiceItemEvents(EventTestCase):
+class TestInvoiceItemEvents(CreateAccountMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -2089,7 +2089,7 @@ class TestInvoiceItemEvents(EventTestCase):
             InvoiceItem.objects.get(id=FAKE_INVOICEITEM["id"])
 
 
-class TestPlanEvents(EventTestCase):
+class TestPlanEvents(CreateAccountMixin, EventTestCase):
     @patch("stripe.Plan.retrieve", autospec=True)
     @patch("stripe.Event.retrieve", autospec=True)
     @patch(
@@ -2153,7 +2153,7 @@ class TestPlanEvents(EventTestCase):
             Plan.objects.get(id=FAKE_PLAN["id"])
 
 
-class TestPriceEvents(EventTestCase):
+class TestPriceEvents(CreateAccountMixin, EventTestCase):
     @patch("stripe.Price.retrieve", autospec=True)
     @patch("stripe.Event.retrieve", autospec=True)
     @patch(
@@ -2217,7 +2217,7 @@ class TestPriceEvents(EventTestCase):
             Price.objects.get(id=FAKE_PRICE["id"])
 
 
-class TestPaymentMethodEvents(AssertStripeFksMixin, EventTestCase):
+class TestPaymentMethodEvents(CreateAccountMixin, AssertStripeFksMixin, EventTestCase):
     def setUp(self):
 
         self.user = get_user_model().objects.create_user(
@@ -2395,7 +2395,7 @@ class TestPaymentIntentEvents(EventTestCase):
         )
 
 
-class TestSubscriptionScheduleEvents(EventTestCase):
+class TestSubscriptionScheduleEvents(CreateAccountMixin, EventTestCase):
     @patch(
         "stripe.SubscriptionSchedule.retrieve",
         autospec=True,
@@ -2833,7 +2833,7 @@ class TestSubscriptionScheduleEvents(EventTestCase):
         assert schedule.canceled_at is not None
 
 
-class TestTaxIdEvents(EventTestCase):
+class TestTaxIdEvents(CreateAccountMixin, EventTestCase):
     @patch(
         "stripe.Customer.retrieve",
         return_value=deepcopy(FAKE_CUSTOMER),
@@ -2976,7 +2976,7 @@ class TestTransferEvents(EventTestCase):
         event.invoke_webhook_handlers()
 
 
-class TestOrderEvents(EventTestCase):
+class TestOrderEvents(CreateAccountMixin, EventTestCase):
     @patch(
         "stripe.BalanceTransaction.retrieve",
         return_value=deepcopy(FAKE_BALANCE_TRANSACTION),

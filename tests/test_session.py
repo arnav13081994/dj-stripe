@@ -23,10 +23,12 @@ from tests import (
     AssertStripeFksMixin,
 )
 
+from .conftest import CreateAccountMixin
+
 pytestmark = pytest.mark.django_db
 
 
-class SessionTest(AssertStripeFksMixin, TestCase):
+class SessionTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     @patch(
         "stripe.BalanceTransaction.retrieve",
         return_value=deepcopy(FAKE_BALANCE_TRANSACTION),
@@ -143,7 +145,7 @@ class SessionTest(AssertStripeFksMixin, TestCase):
         self.assertEqual(f"<id={FAKE_SESSION_I['id']}>", str(session))
 
 
-class TestSession:
+class TestSession(CreateAccountMixin):
 
     key = djstripe_settings.SUBSCRIBER_CUSTOMER_KEY
 

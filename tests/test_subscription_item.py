@@ -35,9 +35,10 @@ from . import (
     FAKE_TAX_RATE_EXAMPLE_1_VAT,
     AssertStripeFksMixin,
 )
+from .conftest import CreateAccountMixin
 
 
-class SubscriptionItemTest(AssertStripeFksMixin, TestCase):
+class SubscriptionItemTest(CreateAccountMixin, AssertStripeFksMixin, TestCase):
     @patch(
         "stripe.BalanceTransaction.retrieve",
         return_value=deepcopy(FAKE_BALANCE_TRANSACTION),
