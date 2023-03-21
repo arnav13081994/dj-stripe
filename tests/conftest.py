@@ -2,6 +2,7 @@
 Module for creating re-usable fixtures to be used across the test suite
 """
 import os
+import time
 
 import pytest
 import stripe
@@ -189,3 +190,9 @@ def platform_account_fixture(django_db_setup, django_db_blocker, configure_setti
         )
 
         yield account_json, account_instance
+
+
+@pytest.fixture(autouse=True)
+def slow_down_tests():
+    yield
+    time.sleep(1)
